@@ -22,9 +22,10 @@ public sealed class SqliteControllerQueryTests
         await db.Database.EnsureCreatedAsync();
         await DemoDataSeeder.SeedAsync(db);
         var requester = await db.Users.SingleAsync(x => x.Id == DemoDataSeeder.EmployeeId);
+        var documentType = await db.DocumentTypes.SingleAsync(x => x.Id == DemoDataSeeder.PurchaseDocumentTypeId);
         db.Requests.AddRange(
-            CreateRequest("PR-2026-0001", "Older", requester, DateTimeOffset.UtcNow.AddDays(-1)),
-            CreateRequest("PR-2026-0002", "Newer", requester, DateTimeOffset.UtcNow));
+            CreateRequest("PUR-2026-0001", "Older", requester, documentType, DateTimeOffset.UtcNow.AddDays(-1)),
+            CreateRequest("PUR-2026-0002", "Newer", requester, documentType, DateTimeOffset.UtcNow));
         await db.SaveChangesAsync();
 
         var controller = new HomeController(db, new TestCurrentUserService(requester));
@@ -34,18 +35,16 @@ public sealed class SqliteControllerQueryTests
         Assert.Equal(new[] { "Newer", "Older" }, model.RecentRequests.Select(x => x.Title));
     }
 
-    private static ApprovalRequest CreateRequest(string number, string title, ApplicationUser requester, DateTimeOffset createdAt) => new()
+    private static ApprovalRequest CreateRequest(string number, string title, ApplicationUser requester, DocumentType documentType, DateTimeOffset createdAt) => new()
     {
         RequestNumber = number,
+        DocumentTypeId = documentType.Id,
+        DocumentType = documentType,
         RequesterId = requester.Id,
         Requester = requester,
         ConfirmedManagerId = DemoDataSeeder.ManagerId,
         Title = title,
-        Subcategory = "One-Time Purchase",
-        Vendor = "Test Vendor",
         Department = requester.Department,
-        Amount = 100m,
-        BusinessJustification = "Test dashboard query compatibility.",
         CreatedAtUtc = createdAt,
         Status = RequestStatus.InApproval
     };

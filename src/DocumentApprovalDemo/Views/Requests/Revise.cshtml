@@ -1,15 +1,46 @@
 @model ReviseRequestViewModel
 @{ ViewData["Title"] = "Revise request"; }
-<div class="page-heading"><div><p class="eyebrow">Rejected request</p><h1>Revise and restart approval</h1><p>The new revision restarts at Manager and preserves all prior evidence.</p></div></div>
+<div class="page-heading"><div><p class="eyebrow">Rejected @Model.DocumentTypeName</p><h1>Revise and restart approval</h1><p>The new revision restarts at stage one and preserves the prior field snapshot and decisions.</p></div></div>
 <form method="post" enctype="multipart/form-data" class="panel form-panel narrow">
     <input asp-for="RequestId" type="hidden" /><div asp-validation-summary="ModelOnly" class="validation"></div>
     <div class="field"><label asp-for="Title"></label><input asp-for="Title" /><span asp-validation-for="Title"></span></div>
-    <div class="form-row"><div class="field"><label asp-for="Subcategory"></label><select asp-for="Subcategory"><option>One-Time Purchase</option><option>Subscription</option><option>Operational Expense</option></select></div><div class="field"><label asp-for="Amount"></label><input asp-for="Amount" type="number" step="0.01" /></div></div>
-    <div class="field"><label asp-for="Vendor"></label><input asp-for="Vendor" /></div>
-    <div class="field"><label asp-for="PurchaseLink"></label><input asp-for="PurchaseLink" /></div>
-    <div class="field"><label asp-for="BusinessJustification"></label><textarea asp-for="BusinessJustification" rows="5"></textarea></div>
+    @for (var i = 0; i < Model.Fields.Count; i++)
+    {
+        var field = Model.Fields[i];
+        <input asp-for="Fields[i].FieldDefinitionId" type="hidden" />
+        <div class="field">
+            <label asp-for="Fields[i].Value">@field.Label @if (field.IsRequired){<span class="required">*</span>}</label>
+            @switch (field.FieldType)
+            {
+                case DocumentFieldType.LongText:
+                    <textarea asp-for="Fields[i].Value" rows="5"></textarea>
+                    break;
+                case DocumentFieldType.Choice:
+                    <select asp-for="Fields[i].Value"><option value="">Select an option</option>@foreach (var option in field.Options){<option value="@option">@option</option>}</select>
+                    break;
+                case DocumentFieldType.Currency:
+                    <input asp-for="Fields[i].Value" type="number" step="0.01" min="0" />
+                    break;
+                case DocumentFieldType.Date:
+                    <input asp-for="Fields[i].Value" type="date" />
+                    break;
+                case DocumentFieldType.Url:
+                    <input asp-for="Fields[i].Value" type="url" />
+                    break;
+                case DocumentFieldType.Boolean:
+                    <select asp-for="Fields[i].Value"><option value="">Select</option><option value="true">Yes</option><option value="false">No</option></select>
+                    break;
+                case DocumentFieldType.User:
+                    <select asp-for="Fields[i].Value" asp-items="Model.Users"><option value="">Select a person</option></select>
+                    break;
+                default:
+                    <input asp-for="Fields[i].Value" />
+                    break;
+            }
+            <span asp-validation-for="Fields[i].Value"></span>
+        </div>
+    }
     <div class="field"><label asp-for="ChangeSummary">What changed?</label><textarea asp-for="ChangeSummary" rows="3"></textarea><span asp-validation-for="ChangeSummary"></span></div>
     <div class="field"><label asp-for="SupportingDocuments">Updated supporting documents</label><input asp-for="SupportingDocuments" type="file" multiple /><span asp-validation-for="SupportingDocuments"></span></div>
     <div class="form-actions"><a class="button" asp-action="Details" asp-route-id="@Model.RequestId">Cancel</a><button class="button primary" type="submit">Submit new revision</button></div>
 </form>
-

@@ -19,18 +19,18 @@ public sealed class RoutingServiceTests
         await db.Database.EnsureCreatedAsync();
         await DemoDataSeeder.SeedAsync(db);
         var service = new RoutingService(db);
-        var route = await service.GetPublishedPurchaseRouteAsync();
-        var president = route.Stages.Single(x => x.Name == "President");
-        var request = new ApprovalRequest { Amount = 1000m };
+        var route = await service.GetPublishedRouteAsync(DemoDataSeeder.PurchaseDocumentTypeId);
+        var executive = route.Stages.Single(x => x.Name == "Executive Review");
+        var request = RequestWithField(DemoDataSeeder.PurchaseDocumentTypeId, "amount", "1000");
 
-        Assert.False(service.ShouldIncludeStage(president, request));
+        Assert.False(service.ShouldIncludeStage(executive, request));
 
-        president.Rules.Single().Operator = ComparisonOperator.GreaterThanOrEqual;
-        Assert.True(service.ShouldIncludeStage(president, request));
+        executive.Rules.Single().Operator = ComparisonOperator.GreaterThanOrEqual;
+        Assert.True(service.ShouldIncludeStage(executive, request));
     }
 
     [Fact]
-    public async Task PresidentIsIncludedAboveSeededThreshold_AndFinanceAlwaysApplies()
+    public async Task DifferentDocumentTypes_EvaluateTheirOwnFieldConditions()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
@@ -39,10 +39,22 @@ public sealed class RoutingServiceTests
         await db.Database.EnsureCreatedAsync();
         await DemoDataSeeder.SeedAsync(db);
         var service = new RoutingService(db);
-        var route = await service.GetPublishedPurchaseRouteAsync();
-        var request = new ApprovalRequest { Amount = 1000.01m };
 
-        Assert.True(service.ShouldIncludeStage(route.Stages.Single(x => x.Name == "President"), request));
-        Assert.True(service.ShouldIncludeStage(route.Stages.Single(x => x.Name == "VP Finance"), request));
+        var purchaseRoute = await service.GetPublishedRouteAsync(DemoDataSeeder.PurchaseDocumentTypeId);
+        Assert.True(service.ShouldIncludeStage(
+            purchaseRoute.Stages.Single(x => x.Name == "Executive Review"),
+            RequestWithField(DemoDataSeeder.PurchaseDocumentTypeId, "amount", "1000.01")));
+
+        var policyRoute = await service.GetPublishedRouteAsync(DemoDataSeeder.PolicyDocumentTypeId);
+        var compliance = policyRoute.Stages.Single(x => x.Name == "Compliance Review");
+        Assert.True(service.ShouldIncludeStage(compliance, RequestWithField(DemoDataSeeder.PolicyDocumentTypeId, "risk_level", "High")));
+        Assert.False(service.ShouldIncludeStage(compliance, RequestWithField(DemoDataSeeder.PolicyDocumentTypeId, "risk_level", "Low")));
+    }
+
+    private static ApprovalRequest RequestWithField(Guid documentTypeId, string key, string value)
+    {
+        var request = new ApprovalRequest { DocumentTypeId = documentTypeId, CurrentRevisionNumber = 1 };
+        request.FieldValues.Add(new RequestFieldValue { Request = request, RevisionNumber = 1, FieldKey = key, Value = value });
+        return request;
     }
 }

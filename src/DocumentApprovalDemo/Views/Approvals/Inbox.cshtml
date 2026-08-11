@@ -1,6 +1,6 @@
 @model IReadOnlyList<ApprovalInstance>
 @{ ViewData["Title"] = "Approval inbox"; }
-<div class="page-heading"><div><p class="eyebrow">Approver workspace</p><h1>Waiting on me</h1><p>Only the currently active stage appears in this queue.</p></div></div>
+<div class="page-heading"><div><p class="eyebrow">Approver workspace</p><h1>Waiting on me</h1><p>Only the active stage appears here; Email and Teams alerts link back to this authenticated review.</p></div></div>
 <section class="panel">
 @if (Model.Count == 0)
 {
@@ -8,12 +8,11 @@
 }
 else
 {
-    <table><thead><tr><th>Request</th><th>Requester</th><th>Stage</th><th>Amount</th><th>Waiting since</th><th></th></tr></thead><tbody>
+    <table><thead><tr><th>Request</th><th>Document type</th><th>Requester</th><th>Stage</th><th>Waiting since</th><th></th></tr></thead><tbody>
     @foreach (var approval in Model)
     {
-        <tr><td><strong>@approval.Request.RequestNumber</strong><small>@approval.Request.Title</small></td><td>@approval.Request.Requester.FullName</td><td>@approval.StageName</td><td>@approval.Request.Amount.ToString("C")</td><td>@approval.ActivatedAtUtc?.ToLocalTime().ToString("g")</td><td><a class="button small" asp-action="Review" asp-route-id="@approval.Id">Review</a></td></tr>
+        <tr><td><strong>@approval.Request.RequestNumber</strong><small>@approval.Request.Title</small></td><td>@approval.Request.DocumentType.Name</td><td>@approval.Request.Requester.FullName</td><td>@approval.StageName</td><td>@approval.ActivatedAtUtc?.ToLocalTime().ToString("g")</td><td><a class="button small" asp-action="Review" asp-route-id="@approval.Id">Review and sign</a></td></tr>
     }
     </tbody></table>
 }
 </section>
-

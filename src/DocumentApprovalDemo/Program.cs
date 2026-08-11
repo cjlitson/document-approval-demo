@@ -6,6 +6,8 @@ using Microsoft.EntityFrameworkCore;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllersWithViews();
+builder.Services.AddRazorComponents().AddInteractiveServerComponents();
+builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
@@ -28,7 +30,7 @@ if (provider.Equals("Sqlite", StringComparison.OrdinalIgnoreCase))
     SqliteDatabaseInitializer.EnsureParentDirectory(connectionString, builder.Environment.ContentRootPath);
 }
 
-builder.Services.AddDbContext<AppDbContext>(options =>
+void ConfigureDatabase(DbContextOptionsBuilder options)
 {
     if (provider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
     {
@@ -38,14 +40,19 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     {
         options.UseSqlite(connectionString);
     }
-});
+}
+
+builder.Services.AddDbContextFactory<AppDbContext>(ConfigureDatabase);
+builder.Services.AddScoped(sp => sp.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext());
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<IRoutingService, RoutingService>();
 builder.Services.AddScoped<IWorkflowService, WorkflowService>();
 builder.Services.AddScoped<IFileStorageService, LocalFileStorageService>();
-builder.Services.AddScoped<INotificationService, DemoNotificationService>();
+builder.Services.AddScoped<INotificationService, OutboxNotificationService>();
+builder.Services.AddScoped<INotificationDispatcher, SimulatedNotificationDispatcher>();
+builder.Services.AddHostedService<NotificationDispatcherWorker>();
 builder.Services.AddScoped<ISignedPackageService, SignedPackageService>();
 
 var app = builder.Build();
@@ -61,10 +68,13 @@ app.UseStaticFiles();
 app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseAntiforgery();
 
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
+app.MapRazorComponents<DocumentApprovalDemo.Components.App>()
+    .AddInteractiveServerRenderMode();
 
 await using (var scope = app.Services.CreateAsyncScope())
 {

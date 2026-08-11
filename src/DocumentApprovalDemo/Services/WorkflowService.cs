@@ -20,7 +20,7 @@ public sealed class WorkflowService(
 {
     public async Task StartAsync(ApprovalRequest request, ApplicationUser actor, CancellationToken cancellationToken = default)
     {
-        var route = await routing.GetPublishedPurchaseRouteAsync(cancellationToken);
+        var route = await routing.GetPublishedRouteAsync(request.DocumentTypeId, cancellationToken);
         request.RouteVersionId = route.Id;
         request.Status = RequestStatus.InApproval;
         request.SubmittedAtUtc = DateTimeOffset.UtcNow;
@@ -30,9 +30,10 @@ public sealed class WorkflowService(
 
         foreach (var stage in stages)
         {
-            var approverId = stage.AssignmentType == "RequesterManager"
-                ? request.ConfirmedManagerId
-                : stage.NamedApproverId ?? throw new InvalidOperationException($"No approver is configured for {stage.Name}.");
+            var approverId = ResolveApproverId(stage, request);
+            var approverIsActive = await db.Users.AnyAsync(x => x.Id == approverId && x.IsActive, cancellationToken);
+            if (!approverIsActive) throw new InvalidOperationException($"The approver configured for '{stage.Name}' is not active.");
+
             var instance = new ApprovalInstance
             {
                 Request = request,
@@ -41,6 +42,7 @@ public sealed class WorkflowService(
                 RouteStageId = stage.Id,
                 Sequence = stage.Sequence,
                 StageName = stage.Name,
+                SignatureRequired = stage.SignatureRequired,
                 ApproverId = approverId,
                 Status = ApprovalStatus.Queued
             };
@@ -49,19 +51,20 @@ public sealed class WorkflowService(
         }
 
         ActivateFirst(request);
-        db.AuditEvents.Add(Audit(request.Id, actor.Id, "RequestSubmitted",
-            $"Revision {request.CurrentRevisionNumber} submitted with route version {route.VersionNumber}."));
-        await db.SaveChangesAsync(cancellationToken);
-
         var pending = request.Approvals.Single(x => x.RevisionNumber == request.CurrentRevisionNumber && x.Status == ApprovalStatus.Pending);
-        var approver = await db.Users.SingleAsync(x => x.Id == pending.ApproverId, cancellationToken);
-        await notifications.QueueApprovalAssignedAsync(approver, request, pending.StageName, cancellationToken);
+        var pendingStage = stages.Single(x => x.Id == pending.RouteStageId);
+        var pendingApprover = await db.Users.SingleAsync(x => x.Id == pending.ApproverId, cancellationToken);
+        await notifications.QueueStageAlertsAsync(pendingApprover, request, pending, pendingStage, cancellationToken);
+        db.AuditEvents.Add(Audit(request.Id, actor.Id, "RequestSubmitted",
+            $"Revision {request.CurrentRevisionNumber} submitted with {request.DocumentType.Name} route version {route.VersionNumber}."));
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<DecisionResult> DecideAsync(Guid approvalId, Guid actorId, DecisionType decision, string typedSignature, string? comments, CancellationToken cancellationToken = default)
     {
         var approval = await db.ApprovalInstances
             .Include(x => x.Request).ThenInclude(x => x.Requester)
+            .Include(x => x.Request).ThenInclude(x => x.DocumentType)
             .Include(x => x.Approver)
             .SingleOrDefaultAsync(x => x.Id == approvalId, cancellationToken);
         if (approval is null) return new(false, "Approval was not found.");
@@ -69,10 +72,14 @@ public sealed class WorkflowService(
         if (approval.ApproverId != actorId) return new(false, "This approval is assigned to another user.");
 
         var normalizedTyped = typedSignature.Trim();
-        if (!string.Equals(normalizedTyped, approval.Approver.FullName.Trim(), StringComparison.OrdinalIgnoreCase))
+        if (approval.SignatureRequired && !string.Equals(normalizedTyped, approval.Approver.FullName.Trim(), StringComparison.OrdinalIgnoreCase))
             return new(false, $"Type your full name exactly as shown: {approval.Approver.FullName}.");
         if (decision == DecisionType.Reject && string.IsNullOrWhiteSpace(comments))
             return new(false, "Comments are required when rejecting a request.");
+
+        var stage = await db.RouteStages.Include(x => x.AlertPolicies)
+            .SingleAsync(x => x.Id == approval.RouteStageId, cancellationToken);
+        await notifications.CancelPendingForApprovalAsync(approval.Id, cancellationToken);
 
         var now = DateTimeOffset.UtcNow;
         approval.Status = decision == DecisionType.Approve ? ApprovalStatus.Approved : ApprovalStatus.Rejected;
@@ -94,26 +101,29 @@ public sealed class WorkflowService(
         if (decision == DecisionType.Reject)
         {
             approval.Request.Status = RequestStatus.Rejected;
-            foreach (var queued in await db.ApprovalInstances.Where(x => x.RequestId == approval.RequestId && x.RevisionNumber == approval.RevisionNumber && x.Status == ApprovalStatus.Queued).ToListAsync(cancellationToken))
-                queued.Status = ApprovalStatus.Superseded;
+            var queued = await db.ApprovalInstances
+                .Where(x => x.RequestId == approval.RequestId && x.RevisionNumber == approval.RevisionNumber && x.Status == ApprovalStatus.Queued)
+                .ToListAsync(cancellationToken);
+            foreach (var item in queued) item.Status = ApprovalStatus.Superseded;
             var revision = await db.RequestRevisions.SingleAsync(x => x.RequestId == approval.RequestId && x.RevisionNumber == approval.RevisionNumber, cancellationToken);
             revision.Status = RevisionStatus.Rejected;
+            await notifications.QueueRequestOutcomeAsync(approval.Request.Requester, approval.Request, approval, stage, "Rejected", cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
-            await notifications.QueueRequestOutcomeAsync(approval.Request.Requester, approval.Request, "Rejected", cancellationToken);
             return new(true);
         }
 
-        var next = await db.ApprovalInstances
+        var queuedApprovals = await db.ApprovalInstances
             .Where(x => x.RequestId == approval.RequestId && x.RevisionNumber == approval.RevisionNumber && x.Status == ApprovalStatus.Queued)
-            .OrderBy(x => x.Sequence)
-            .FirstOrDefaultAsync(cancellationToken);
+            .ToListAsync(cancellationToken);
+        var next = queuedApprovals.OrderBy(x => x.Sequence).FirstOrDefault();
         if (next is not null)
         {
             next.Status = ApprovalStatus.Pending;
             next.ActivatedAtUtc = now;
-            await db.SaveChangesAsync(cancellationToken);
             var nextApprover = await db.Users.SingleAsync(x => x.Id == next.ApproverId, cancellationToken);
-            await notifications.QueueApprovalAssignedAsync(nextApprover, approval.Request, next.StageName, cancellationToken);
+            var nextStage = await db.RouteStages.Include(x => x.AlertPolicies)
+                .SingleAsync(x => x.Id == next.RouteStageId, cancellationToken);
+            await notifications.QueueStageAlertsAsync(nextApprover, approval.Request, next, nextStage, cancellationToken);
         }
         else
         {
@@ -122,10 +132,10 @@ public sealed class WorkflowService(
             var revision = await db.RequestRevisions.SingleAsync(x => x.RequestId == approval.RequestId && x.RevisionNumber == approval.RevisionNumber, cancellationToken);
             revision.Status = RevisionStatus.Approved;
             db.AuditEvents.Add(Audit(approval.RequestId, actorId, "RequestApproved", "All required stages approved; signed package is available."));
-            await db.SaveChangesAsync(cancellationToken);
-            await notifications.QueueRequestOutcomeAsync(approval.Request.Requester, approval.Request, "Approved", cancellationToken);
+            await notifications.QueueRequestOutcomeAsync(approval.Request.Requester, approval.Request, approval, stage, "Approved", cancellationToken);
         }
 
+        await db.SaveChangesAsync(cancellationToken);
         return new(true);
     }
 
@@ -133,7 +143,10 @@ public sealed class WorkflowService(
     {
         var oldRevision = request.CurrentRevisionNumber;
         foreach (var instance in request.Approvals.Where(x => x.RevisionNumber == oldRevision && x.Status is ApprovalStatus.Approved or ApprovalStatus.Rejected or ApprovalStatus.Pending or ApprovalStatus.Queued))
+        {
             instance.Status = ApprovalStatus.Superseded;
+            await notifications.CancelPendingForApprovalAsync(instance.Id, cancellationToken);
+        }
         var prior = request.Revisions.Single(x => x.RevisionNumber == oldRevision);
         prior.Status = RevisionStatus.Superseded;
 
@@ -154,6 +167,17 @@ public sealed class WorkflowService(
         await db.SaveChangesAsync(cancellationToken);
         await StartAsync(request, actor, cancellationToken);
     }
+
+    private static Guid ResolveApproverId(ApprovalRouteStage stage, ApprovalRequest request) => stage.AssignmentStrategy switch
+    {
+        AssignmentStrategy.RequesterManager => request.ConfirmedManagerId,
+        AssignmentStrategy.NamedUser => stage.NamedApproverId
+            ?? throw new InvalidOperationException($"No named approver is configured for '{stage.Name}'."),
+        AssignmentStrategy.UserField => Guid.TryParse(request.GetFieldValue(stage.AssigneeFieldKey ?? ""), out var userId)
+            ? userId
+            : throw new InvalidOperationException($"'{stage.Name}' requires a valid person in field '{stage.AssigneeFieldKey}'."),
+        _ => throw new InvalidOperationException($"Unsupported assignment strategy for '{stage.Name}'.")
+    };
 
     private static void ActivateFirst(ApprovalRequest request)
     {

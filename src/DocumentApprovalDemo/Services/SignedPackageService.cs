@@ -20,16 +20,21 @@ public sealed class SignedPackageService : ISignedPackageService
             $"Title: {request.Title}",
             $"Requester: {request.Requester.FullName} ({request.Requester.Email})",
             $"Department: {request.Department}",
-            $"Category: Purchase Request / {request.Subcategory}",
-            $"Vendor: {request.Vendor}",
-            $"Amount: {request.Amount.ToString("C", CultureInfo.GetCultureInfo("en-US"))}",
+            $"Document type: {request.DocumentType.Name}",
             $"Revision: {request.CurrentRevisionNumber}",
             $"Route version: {request.RouteVersion?.VersionNumber}",
             $"Status: {request.Status}",
             "",
-            "BUSINESS JUSTIFICATION"
+            "DOCUMENT DATA"
         };
-        lines.AddRange(Wrap(request.BusinessJustification, 88));
+        foreach (var field in request.FieldValues
+                     .Where(x => x.RevisionNumber == request.CurrentRevisionNumber)
+                     .OrderBy(x => x.Sequence))
+        {
+            var value = FormatValue(field);
+            var wrapped = Wrap($"{field.Label}: {value}", 88).ToList();
+            lines.AddRange(wrapped.Count > 0 ? wrapped : [field.Label + ":"]);
+        }
         lines.Add("");
         lines.Add("APPROVAL EVIDENCE");
 
@@ -54,6 +59,15 @@ public sealed class SignedPackageService : ISignedPackageService
         lines.Add("This demonstration records authenticated approval evidence; it is not a DocuSign electronic-signature certificate.");
 
         return MinimalPdfWriter.Write(lines);
+    }
+
+    private static string FormatValue(RequestFieldValue field)
+    {
+        if (!string.IsNullOrWhiteSpace(field.DisplayValue)) return field.DisplayValue;
+        if (field.FieldType == DocumentFieldType.Currency &&
+            decimal.TryParse(field.Value, NumberStyles.Number, CultureInfo.InvariantCulture, out var amount))
+            return amount.ToString("C", CultureInfo.GetCultureInfo("en-US"));
+        return field.Value;
     }
 
     private static IEnumerable<string> Wrap(string text, int width)

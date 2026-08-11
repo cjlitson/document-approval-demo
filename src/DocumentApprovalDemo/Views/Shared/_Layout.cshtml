@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>@ViewData["Title"] · Approval Hub</title>
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/workflow-designer.css" asp-append-version="true" />
 </head>
 <body>
 <header class="site-header">
@@ -15,9 +16,10 @@
             <a asp-controller="Home" asp-action="Index">Dashboard</a>
             <a asp-controller="Requests" asp-action="Index">My requests</a>
             <a asp-controller="Approvals" asp-action="Inbox">Approvals</a>
+            <a asp-controller="Notifications" asp-action="Index">Alerts</a>
             @if (User.IsInRole(Roles.SystemAdmin))
             {
-                <a asp-controller="AdminRoutes" asp-action="Index">Route admin</a>
+                <a href="/route-designer">Route designer</a>
             }
         </nav>
         <div class="user-menu">
@@ -37,8 +39,7 @@
     }
     @RenderBody()
 </main>
-<footer>Demonstration environment · SQLite and local file storage · Not for production signatures</footer>
+<footer>Demonstration environment · .NET 10 · SQLite · simulated Email/Teams delivery · not for production signatures</footer>
 @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>
-

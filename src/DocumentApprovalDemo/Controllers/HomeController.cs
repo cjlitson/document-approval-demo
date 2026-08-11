@@ -14,7 +14,7 @@ public sealed class HomeController(AppDbContext db, ICurrentUserService currentU
     public async Task<IActionResult> Index(CancellationToken cancellationToken)
     {
         var userId = currentUser.UserId!.Value;
-        var recentRequests = await db.Requests.AsNoTracking()
+        var recentRequests = await db.Requests.AsNoTracking().Include(x => x.DocumentType)
             .Where(x => x.RequesterId == userId)
             .ToListAsync(cancellationToken);
         var model = new DashboardViewModel
@@ -22,6 +22,7 @@ public sealed class HomeController(AppDbContext db, ICurrentUserService currentU
             MyOpenRequests = await db.Requests.CountAsync(x => x.RequesterId == userId && (x.Status == RequestStatus.InApproval || x.Status == RequestStatus.Rejected), cancellationToken),
             MyPendingApprovals = await db.ApprovalInstances.CountAsync(x => x.ApproverId == userId && x.Status == ApprovalStatus.Pending, cancellationToken),
             ApprovedRequests = await db.Requests.CountAsync(x => x.RequesterId == userId && x.Status == RequestStatus.Approved, cancellationToken),
+            UnreadAlerts = await db.NotificationOutbox.CountAsync(x => x.UserId == userId && !x.IsRead && x.Status != NotificationStatus.Cancelled, cancellationToken),
             RecentRequests = recentRequests
                 .OrderByDescending(x => x.CreatedAtUtc)
                 .Take(5)

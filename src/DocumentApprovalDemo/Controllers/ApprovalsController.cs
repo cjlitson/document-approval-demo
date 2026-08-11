@@ -16,7 +16,9 @@ public sealed class ApprovalsController(AppDbContext db, ICurrentUserService cur
     public async Task<IActionResult> Inbox(CancellationToken cancellationToken)
     {
         var userId = currentUser.UserId!.Value;
-        var approvals = await db.ApprovalInstances.AsNoTracking().Include(x => x.Request).ThenInclude(x => x.Requester)
+        var approvals = await db.ApprovalInstances.AsNoTracking()
+            .Include(x => x.Request).ThenInclude(x => x.Requester)
+            .Include(x => x.Request).ThenInclude(x => x.DocumentType)
             .Where(x => x.ApproverId == userId && x.Status == ApprovalStatus.Pending)
             .ToListAsync(cancellationToken);
         return View(approvals.OrderBy(x => x.ActivatedAtUtc).ToList());
@@ -28,6 +30,8 @@ public sealed class ApprovalsController(AppDbContext db, ICurrentUserService cur
         var approval = await db.ApprovalInstances.AsNoTracking()
             .Include(x => x.Request).ThenInclude(x => x.Requester)
             .Include(x => x.Request).ThenInclude(x => x.Attachments)
+            .Include(x => x.Request).ThenInclude(x => x.DocumentType)
+            .Include(x => x.Request).ThenInclude(x => x.FieldValues)
             .Include(x => x.Approver)
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (approval is null) return NotFound();
