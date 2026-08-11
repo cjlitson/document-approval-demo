@@ -1,83 +1,93 @@
-# Document Approval Demo
+# Document Approval Platform Prototype
 
-An ASP.NET Core MVC demonstration of a reusable, configuration-driven document approval platform. The pilot implements a purchase-request process while keeping the workflow model extensible for additional document types.
+A .NET 10 demonstration of a reusable document-approval platform. ASP.NET Core MVC runs the requester and approver experience; an interactive Blazor workspace lets central administrators design versioned routes and alerts. EF Core uses SQLite for the demo and can switch to SQL Server/Azure SQL.
 
-## What the demo proves
+## What this version proves
 
-- One purchase request with `One-Time Purchase`, `Subscription`, and `Operational Expense` subcategories.
-- Required supporting documents, vendor details, amount, department, and business justification.
-- Manager suggestion/confirmation, with a requester-selectable fallback and self-selection prevention.
-- Versioned route: **Manager → conditional President → VP Finance**.
-- Configurable President amount operator and threshold, including explicit behavior at exactly `$1,000`.
-- Named President and VP Finance approvers stored on each immutable published route version.
-- An adopted signature at every stage: the approver types their full name while signed in.
-- Approve/reject decisions with identity, email, signature, comments, route, revision, and UTC timestamp evidence.
-- Rejected requests create a new revision and restart at stage one; prior evidence remains preserved.
-- Final signed-package PDF plus downloadable original attachments.
-- Email and Teams notification queue records (delivery is simulated in this demo).
-- Central system administrator-only route drafting and publishing.
-- SQLite for a zero-infrastructure demo, with a configuration switch for SQL Server.
+- Document types define their own ordered intake fields instead of relying on purchase columns in code.
+- Two seeded workflows demonstrate reuse:
+  - **Purchase Request:** Manager Review → conditional Executive Review when `amount > 1000` → Financial Control Review.
+  - **Policy Approval:** Owner Manager Review → conditional Compliance Review when `risk_level = High` → Records Approval assigned from a person field on the form.
+- The Blazor route designer can create a draft, add/remove/reorder/rename stages, choose manager/named-person/person-field assignment, build multiple AND conditions, configure alerts, simulate route results, save, and publish.
+- Published route versions are immutable; in-flight requests retain the version selected at submission.
+- Every seeded stage requires an adopted signature: the authenticated approver types their full name.
+- Rejection creates a new revision, preserves prior field values and decision evidence, and restarts at stage one.
+- Supporting documents are required, and final approval produces a signed-package PDF while retaining the originals.
+- Alert policies are versioned with each stage. Assignment, reminder, escalation, and outcome events create idempotent SQL outbox records for in-app, Email, and Teams channels.
+- A background dispatcher simulates channel delivery, records attempts, and cancels obsolete reminders/escalations when a stage completes.
 
-## Run locally
+## Run in Visual Studio 2026
 
-Prerequisites: [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) or Visual Studio 2022 17.8+.
+1. Open `DocumentApprovalDemo.sln`.
+2. Confirm the startup project is `DocumentApprovalDemo`.
+3. Build the solution, then press **F5**.
+4. If Visual Studio asks to trust the ASP.NET Core development certificate, accept it.
+5. The first run creates `src/DocumentApprovalDemo/App_Data/document-approval-v2-demo.db` and seeds the two document types, routes, alert policies, and demo identities.
 
-> Visual Studio 2019 does not support .NET 8. Use Visual Studio 2022 or the `dotnet` command line for this repository.
+Command-line equivalent:
 
 ```bash
 dotnet restore DocumentApprovalDemo.sln
 dotnet run --project src/DocumentApprovalDemo/DocumentApprovalDemo.csproj
 ```
 
-Open the HTTPS URL printed by ASP.NET Core. The first run creates `App_Data/document-approval-demo.db` and seeds the route and demo identities.
+Prerequisite: the .NET 10 SDK. The solution deliberately moved from .NET 8 because this prototype is intended to grow beyond the November 2026 end of .NET 8 support.
 
-To reset the demo, stop the app and delete `src/DocumentApprovalDemo/App_Data`. The folder is ignored by Git.
+If the data model changes during prototype development, stop the app and delete `src/DocumentApprovalDemo/App_Data/document-approval-v2-demo.db`; the app recreates demo data on the next run. This `EnsureCreated` behavior is for the prototype only.
 
 ## Suggested demonstration
 
-1. Sign in as **Avery Employee** and submit a request with a supporting file.
-2. Sign in as **Morgan Manager**, open Approvals, type `Morgan Manager`, and approve.
-3. For an amount above the seeded `$1,000` threshold, sign in as **Pat President** and approve.
-4. Sign in as **Finley Finance** and provide the final approval.
-5. Return as Avery to download the signed-package PDF and original attachments.
-6. Sign in as **Alex Admin** to create a route draft, change the amount operator or named approvers, and publish a new immutable version.
+### Prove route design is not hardcoded
 
-The seed rule is `Amount > 1000`. Therefore exactly `$1,000` skips President until an administrator publishes a version using `GreaterThanOrEqual` or `Equal`.
+1. Sign in as **Alex Admin** and open **Route designer**.
+2. Switch between Purchase Request and Policy Approval. Compare their form fields, stages, assignee strategies, conditions, and route-simulator inputs.
+3. Create an editable draft for Purchase Request.
+4. Rename a stage, change the exact `$1,000` operator, reorder or add a stage, and change its named approver.
+5. Expand **Alert policy** on a stage. Adjust the reminder/escalation delays or channels, save, and publish.
+
+### Run a purchase approval
+
+1. Sign in as **Avery Employee**, choose Purchase Request, enter an amount above `$1,000`, confirm Morgan as manager, attach a file, and submit.
+2. Sign in as **Morgan Manager**, review the document, type `Morgan Manager`, and approve.
+3. Sign in as **Pat President** for the conditional stage, then **Finley Finance** for final approval.
+4. Return as Avery to download the signed package and originals.
+
+Exactly `$1,000` follows the operator stored in the published route. The seed uses `GreaterThan`, so it initially skips Executive Review; an administrator can publish `GreaterThanOrEqual` or `Equal` without a code change.
+
+### Run a different document route
+
+1. As Avery, choose Policy Approval, set risk to `High`, select a Records approver, attach supporting material, and submit.
+2. Observe that the high-risk condition adds Compliance Review and that the final approver came from the submitted person field.
+
+### Explore alerts
+
+1. Open **Alerts** after submitting or advancing a request.
+2. Assignment alerts are immediately delivered by the simulated worker; reminders at 48 hours and escalations at 120 hours remain pending.
+3. As Alex Admin, choose **Simulate all due now** to advance pending records without waiting.
+4. Inspect channel, event, status, cancellation, and delivery-attempt history. No external email or Teams message is sent.
 
 ## Database configuration
 
-SQLite is the default:
+SQLite is the zero-infrastructure default:
 
 ```json
 "ConnectionStrings": {
-  "ApprovalDatabase": "Data Source=App_Data/document-approval-demo.db"
+  "ApprovalDatabase": "Data Source=App_Data/document-approval-v2-demo.db"
 },
 "Database": {
   "Provider": "Sqlite"
 }
 ```
 
-For SQL Server, set `Database:Provider` to `SqlServer` and replace the connection string. The SQL Server EF Core provider is already referenced. The demo uses `EnsureCreated`; before production, introduce reviewed EF Core migrations and remove automatic schema creation.
-
-## Authentication and signature evidence
-
-The Development-only identity selector makes the workflow easy to demonstrate. Production should replace it with Microsoft Entra ID (OpenID Connect), use immutable Entra object IDs, enforce Conditional Access/MFA as required, and obtain the requester manager from Microsoft Graph. The typed name is an adopted signature; the authenticated identity remains authoritative.
-
-This is not a DocuSign certificate and should only replace DocuSign for document classes whose legal, compliance, and records owners accept this evidence model.
+For SQL Server, set `Database:Provider` to `SqlServer` and replace the connection string. Before production, replace `EnsureCreated` with reviewed EF Core migrations, use Azure SQL with managed identity, and add tested rollback/backup procedures.
 
 ## Production boundaries
 
-Before real use, add:
+The Development-only identity selector represents Microsoft Entra authentication. Production must add Entra OpenID Connect, immutable object IDs, Conditional Access/MFA as appropriate, and Microsoft Graph manager lookup. The typed name is an adopted signature; it is not a DocuSign certificate and should only be used for document classes accepted by legal, compliance, and records owners.
 
-- Entra ID and Graph manager integration; disable demo identity switching.
-- Azure SQL, migrations, managed identity, Key Vault, and private networking as appropriate.
-- Blob or SharePoint file storage with malware scanning, retention, legal hold, and access controls.
-- Real Microsoft Graph email/Teams delivery with retry, idempotency, and dead-letter handling.
-- Concurrency controls for request numbering and approval decisions.
-- Central telemetry, audit export, backup/restore testing, accessibility testing, and threat modeling.
-- Business validation of signature sufficiency, segregation of duties, retention, and document classifications.
+Also replace local uploads with Blob Storage or SharePoint plus scanning/retention controls, and replace the simulated dispatcher with approved Microsoft Graph Email/Teams delivery. Alerts should continue linking to the authenticated application; they should not bypass the required typed signature.
 
-See [Architecture](docs/architecture.md) and [Production roadmap](docs/production-roadmap.md) for more detail.
+See [Architecture](docs/architecture.md) and [Production roadmap](docs/production-roadmap.md).
 
 ## Tests
 
@@ -85,5 +95,4 @@ See [Architecture](docs/architecture.md) and [Production roadmap](docs/productio
 dotnet test DocumentApprovalDemo.sln
 ```
 
-The repository includes tests for configurable `$1,000` routing behavior, mandatory final finance routing, and signed-package evidence output. GitHub Actions builds and tests every pull request.
-
+The suite covers document-type-specific rules, configurable `$1,000` behavior, person-field assignment, typed signatures, SQLite timestamp compatibility, dynamic signed-package evidence, and multi-channel outbox delivery. GitHub Actions builds and tests with .NET 10 on every pull request.
