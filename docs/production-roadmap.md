@@ -1,41 +1,42 @@
 # Production roadmap
 
-## Phase 1 — Validate the pilot
+## Phase 1 — Validate the reusable prototype
 
-- Walk the demonstration with requester, manager, President, VP Finance, and administrator roles.
-- Confirm the exact `$1,000` rule and any department/subcategory exceptions.
-- Obtain legal/compliance/records acceptance of authenticated typed-name evidence.
-- Confirm required file types, maximum sizes, retention, and final-package contents.
-- Define operational ownership, support hours, and approval delegation/escalation behavior.
+- Demonstrate both Purchase Request and Policy Approval from intake through signed package.
+- Use the designer to prove stage names, assignees, conditions, exact `$1,000` behavior, and alert timing are configuration rather than code.
+- Validate manager, named-person, and person-field assignment with business owners.
+- Obtain legal/compliance/records acceptance of authenticated typed-name evidence for each included document class.
+- Confirm required file types, sizes, retention, package contents, reminder timing, escalation recipients, and support ownership.
 
-## Phase 2 — Production foundation
+## Phase 2 — Production foundation on Azure pay-as-you-go
 
-- Replace demo authentication with Microsoft Entra ID and Microsoft Graph manager lookup.
-- Deploy App Service and Azure SQL using managed identities and Key Vault references.
-- Move attachments to Blob Storage or SharePoint and add malware scanning.
-- Add EF Core migrations, optimistic concurrency, idempotency keys, and durable background jobs.
-- Deliver real email and Teams adaptive-card notifications without allowing card actions to bypass the signature page.
-- Add Application Insights, audit export, backup/restore validation, and alerting.
+- Replace demo authentication with Microsoft Entra ID and manager lookup through Microsoft Graph.
+- Deploy the .NET 10 app to Azure App Service and use Azure SQL with managed identities and Key Vault references.
+- Replace local files with Blob Storage or SharePoint and add malware scanning, retention, and legal-hold controls.
+- Introduce reviewed EF Core migrations, optimistic concurrency, transactional request numbering, and deployment slots.
+- Run the SQL outbox dispatcher as an App Service WebJob initially; add real Graph Email and Teams delivery adapters with retry and dead-letter handling.
+- Add Application Insights, health checks, audit export, backup/restore validation, accessibility testing, and threat modeling.
 
-## Phase 3 — Reusable approval engine
+## Phase 3 — Expand the approval engine
 
-- Add request-type and field-definition configuration.
-- Expand the rule builder to amount, department, subcategory, requester attributes, and compound AND/OR groups.
-- Add delegation, out-of-office, escalation, parallel stages, observers, and service-level targets.
-- Add reporting for cycle time, rejections, bottlenecks, spend, subscriptions, and renewals.
-- Apply retention and legal-hold policies by document type.
+- Add administrator-designed document types and field definitions, not just seeded types.
+- Add condition groups with explicit AND/OR nesting, parallel stages, multiple approvers, observers, delegation, out-of-office handling, and due-date calendars.
+- Add template-controlled final-package assembly, document classification, retention, and legal hold by document type.
+- Add reporting for cycle time, rejections, bottlenecks, overdue stages, alert effectiveness, and process-specific measures.
+- Introduce Service Bus/Azure Functions only when volume, resiliency, or independent scaling warrants the added operating cost.
 
 ## Phase 4 — Copilot Studio
 
+- Expose narrow, Entra-protected APIs through an approved custom connector.
 - Ground policy answers in approved SharePoint content.
-- Let authenticated users start drafts, check status, and identify missing information conversationally.
-- Provide approvers with evidence-linked summaries while keeping the human decision and typed signature in the app.
-- Evaluate answer accuracy, authorization leakage, prompt injection, and audit completeness before broader rollout.
+- Let authenticated users choose a document type, start a draft, check status, and identify missing information conversationally.
+- Provide evidence-linked summaries for assigned approvers while retaining the human decision and typed signature in the app.
+- Evaluate authorization leakage, prompt injection, attachment handling, answer accuracy, audit completeness, and human override before broader rollout.
 
 ## Go-live gates
 
-1. Business owner signs off on every route and exception.
+1. Business owners sign off on every published route, field, rule, and alert policy.
 2. Legal/compliance approves the signature evidence for the included document classes.
-3. Security validates authentication, authorization, storage, secrets, logging, and threat model.
+3. Security validates authentication, authorization, storage, secrets, logging, connector permissions, and threat model.
 4. Records owners validate retention, package integrity, retrieval, and legal hold.
-5. Operations completes recovery, monitoring, support, and rollback rehearsals.
+5. Operations completes monitoring, retry/dead-letter procedures, recovery, support, and rollback rehearsals.

@@ -226,15 +226,17 @@ else
     private async Task PublishAsync()
     {
         if (!await SaveEditorAsync()) return;
+        var route = Route;
+        if (route is null) return;
         await using var db = await DbFactory.CreateDbContextAsync();
         await using var transaction = await db.Database.BeginTransactionAsync();
-        var draft = await db.RouteVersions.SingleAsync(x => x.Id == Route!.Id && x.Status == RouteVersionStatus.Draft);
+        var draft = await db.RouteVersions.SingleAsync(x => x.Id == route.Id && x.Status == RouteVersionStatus.Draft);
         var published = await db.RouteVersions.Where(x => x.RouteId == draft.RouteId && x.Status == RouteVersionStatus.Published).ToListAsync();
         foreach (var version in published) version.Status = RouteVersionStatus.Retired;
         draft.Status = RouteVersionStatus.Published;
         draft.PublishedAtUtc = DateTimeOffset.UtcNow;
         draft.PublishedById = await CurrentUserIdAsync();
-        db.AuditEvents.Add(new AuditEvent { ActorUserId = draft.PublishedById.Value, EventType = "RoutePublished", Details = $"Published route version {draft.VersionNumber} with {Route.Stages.Count} stages." });
+        db.AuditEvents.Add(new AuditEvent { ActorUserId = draft.PublishedById.Value, EventType = "RoutePublished", Details = $"Published route version {draft.VersionNumber} with {route.Stages.Count} stages." });
         await db.SaveChangesAsync();
         await transaction.CommitAsync();
         Message = $"Version {draft.VersionNumber} published for new requests."; IsError = false;

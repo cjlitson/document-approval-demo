@@ -167,7 +167,7 @@ public sealed class SimulatedNotificationDispatcher(
     public async Task<int> DispatchDueAsync(CancellationToken cancellationToken = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        var candidates = await db.NotificationOutbox
+        var candidates = await db.NotificationOutbox.AsNoTracking()
             .Where(x => x.Status == NotificationStatus.Pending)
             .ToListAsync(cancellationToken);
         var due = candidates
@@ -176,22 +176,32 @@ public sealed class SimulatedNotificationDispatcher(
             .Take(50)
             .ToList();
 
+        var delivered = 0;
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         foreach (var notification in due)
         {
-            notification.AttemptCount++;
-            notification.Status = NotificationStatus.Delivered;
-            notification.DeliveredAtUtc = DateTimeOffset.UtcNow;
-            notification.DeliveryAttempts.Add(new NotificationDeliveryAttempt
+            var now = DateTimeOffset.UtcNow;
+            var affected = await db.NotificationOutbox
+                .Where(x => x.Id == notification.Id && x.Status == NotificationStatus.Pending)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(x => x.AttemptCount, x => x.AttemptCount + 1)
+                    .SetProperty(x => x.Status, NotificationStatus.Delivered)
+                    .SetProperty(x => x.DeliveredAtUtc, now), cancellationToken);
+            if (affected == 0) continue;
+            delivered++;
+            db.NotificationDeliveryAttempts.Add(new NotificationDeliveryAttempt
             {
-                AttemptNumber = notification.AttemptCount,
+                NotificationOutboxId = notification.Id,
+                AttemptNumber = notification.AttemptCount + 1,
                 Result = "SimulatedDelivered",
                 Details = $"Prototype delivery through {notification.Channel}; no external message was sent."
             });
             logger.LogInformation("Simulated {Channel} delivery for notification {NotificationId}", notification.Channel, notification.Id);
         }
 
-        if (due.Count > 0) await db.SaveChangesAsync(cancellationToken);
-        return due.Count;
+        if (delivered > 0) await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return delivered;
     }
 }
 
