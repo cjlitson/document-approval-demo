@@ -1,0 +1,35 @@
+@model RequestFormViewModel
+@{ ViewData["Title"] = "New purchase request"; }
+<div class="page-heading"><div><p class="eyebrow">New request</p><h1>Purchase request</h1><p>The published route will evaluate this request when you submit it.</p></div></div>
+<form method="post" enctype="multipart/form-data" class="form-layout">
+    <section class="panel form-panel">
+        <h2>Purchase details</h2>
+        <div asp-validation-summary="ModelOnly" class="validation"></div>
+        <div class="field full"><label asp-for="Title">Request name</label><input asp-for="Title" placeholder="Example: Operations team software renewal" /><span asp-validation-for="Title"></span></div>
+        <div class="field"><label asp-for="Subcategory"></label><select asp-for="Subcategory"><option>One-Time Purchase</option><option>Subscription</option><option>Operational Expense</option></select></div>
+        <div class="field"><label asp-for="Vendor"></label><input asp-for="Vendor" /></div>
+        <div class="field"><label asp-for="Amount"></label><input asp-for="Amount" type="number" step="0.01" min="0.01" /></div>
+        <div class="field"><label asp-for="Department"></label><input asp-for="Department" /></div>
+        <div class="field full"><label asp-for="PurchaseLink">Purchase or vendor link</label><input asp-for="PurchaseLink" placeholder="https://" /><span asp-validation-for="PurchaseLink"></span></div>
+        <div class="field full"><label asp-for="BusinessJustification">Business justification</label><textarea asp-for="BusinessJustification" rows="5" placeholder="Describe the need, expected outcome, and timing."></textarea><span asp-validation-for="BusinessJustification"></span></div>
+    </section>
+    <aside>
+        <section class="panel form-panel">
+            <h2>Manager confirmation</h2>
+            <p class="help">The manager is suggested from Microsoft Entra in production. You may correct it before submission.</p>
+            <label asp-for="ManagerId">Manager</label><select asp-for="ManagerId" asp-items="Model.Managers"><option value="">Select manager</option></select><span asp-validation-for="ManagerId"></span>
+            <label class="check"><input asp-for="ManagerConfirmed" /> I confirm this manager is correct.</label><span asp-validation-for="ManagerConfirmed"></span>
+        </section>
+        <section class="panel form-panel">
+            <h2>Supporting documents</h2>
+            <p class="help">Required. PDF, Office, image, or text; up to 25 MB each.</p>
+            <input asp-for="SupportingDocuments" type="file" multiple /><span asp-validation-for="SupportingDocuments"></span>
+        </section>
+        <section class="route-preview">
+            <strong>Current pilot route</strong>
+            <ol><li>Manager</li><li>President <small>when configured rule matches</small></li><li>VP Finance <small>final</small></li></ol>
+        </section>
+        <button class="button primary full-button" type="submit">Submit for approval</button>
+    </aside>
+</form>
+

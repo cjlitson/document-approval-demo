@@ -1,0 +1,39 @@
+@model ApprovalRequest
+@{ ViewData["Title"] = Model.RequestNumber; }
+<div class="page-heading">
+    <div><p class="eyebrow">@Model.RequestNumber · Revision @Model.CurrentRevisionNumber</p><h1>@Model.Title</h1><p>@Model.Vendor · @Model.Amount.ToString("C") · @Model.Subcategory</p></div>
+    <div class="heading-actions">
+        <span class="status large @Model.Status.ToString().ToLowerInvariant()">@Model.Status</span>
+        @if (Model.Status == RequestStatus.Rejected && Model.RequesterId.ToString() == User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value)
+        {
+            <a class="button primary" asp-action="Revise" asp-route-id="@Model.Id">Revise and resubmit</a>
+        }
+        @if (Model.Status == RequestStatus.Approved)
+        {
+            <a class="button primary" asp-action="SignedPackage" asp-route-id="@Model.Id">Download signed package</a>
+        }
+    </div>
+</div>
+<div class="detail-grid">
+    <div>
+        <section class="panel detail-list"><h2>Request details</h2>
+            <dl><div><dt>Requester</dt><dd>@Model.Requester.FullName<br /><small>@Model.Requester.Email</small></dd></div><div><dt>Department</dt><dd>@Model.Department</dd></div><div><dt>Confirmed manager</dt><dd>@Model.ConfirmedManager.FullName<br /><small>@Model.ManagerSource</small></dd></div><div><dt>Purchase link</dt><dd>@if (!string.IsNullOrWhiteSpace(Model.PurchaseLink)){<a href="@Model.PurchaseLink" rel="noreferrer" target="_blank">Open vendor page ↗</a>}else{<span>Not supplied</span>}</dd></div></dl>
+            <h3>Business justification</h3><p class="preserve">@Model.BusinessJustification</p>
+        </section>
+        <section class="panel"><div class="panel-heading"><div><h2>Supporting documents</h2><p>Original files are retained with their revision.</p></div></div>
+            <ul class="file-list">@foreach (var file in Model.Attachments.OrderByDescending(x => x.RevisionNumber)){<li><div><strong>@file.OriginalFileName</strong><small>Revision @file.RevisionNumber · @((file.SizeBytes / 1024d).ToString("N1")) KB</small></div><a asp-action="Attachment" asp-route-requestId="@Model.Id" asp-route-attachmentId="@file.Id">Download</a></li>}</ul>
+        </section>
+    </div>
+    <aside>
+        <section class="panel"><div class="panel-heading"><div><h2>Approval route</h2><p>Route version @Model.RouteVersion?.VersionNumber</p></div></div>
+            <ol class="timeline">
+            @foreach (var approval in Model.Approvals.Where(x => x.RevisionNumber == Model.CurrentRevisionNumber).OrderBy(x => x.Sequence))
+            {
+                <li class="@approval.Status.ToString().ToLowerInvariant()"><span class="timeline-marker">@approval.Sequence</span><div><strong>@approval.StageName</strong><small>@approval.Approver.FullName · @approval.Status</small>@if (approval.Decision is not null){<p>Signed “@approval.Decision.TypedSignature”<br />@approval.Decision.DecidedAtUtc.ToLocalTime().ToString("g")</p>@if (!string.IsNullOrWhiteSpace(approval.Decision.Comments)){<p class="comments">@approval.Decision.Comments</p>}}</div></li>
+            }
+            </ol>
+        </section>
+        <section class="panel"><h2>Revision history</h2><ul class="revision-list">@foreach (var revision in Model.Revisions.OrderByDescending(x => x.RevisionNumber)){<li><strong>Revision @revision.RevisionNumber · @revision.Status</strong><small>@revision.SubmittedAtUtc.ToLocalTime().ToString("g")</small><p>@revision.ChangeSummary</p></li>}</ul></section>
+    </aside>
+</div>
+

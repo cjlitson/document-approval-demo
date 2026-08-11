@@ -1,0 +1,19 @@
+@model IReadOnlyList<ApprovalRequest>
+@{ ViewData["Title"] = "My requests"; }
+<div class="page-heading"><div><p class="eyebrow">Requester workspace</p><h1>My requests</h1><p>All purchase requests submitted with your authenticated identity.</p></div><a class="button primary" asp-action="Create">+ New request</a></div>
+<section class="panel">
+@if (Model.Count == 0)
+{
+    <div class="empty-state"><h2>No requests yet</h2><p>Start with a vendor quote, invoice, or other required supporting document.</p></div>
+}
+else
+{
+    <table><thead><tr><th>Request</th><th>Title</th><th>Category</th><th>Amount</th><th>Revision</th><th>Status</th></tr></thead><tbody>
+    @foreach (var request in Model)
+    {
+        <tr><td><a asp-action="Details" asp-route-id="@request.Id">@request.RequestNumber</a></td><td>@request.Title<small>@request.Vendor</small></td><td>@request.Subcategory</td><td>@request.Amount.ToString("C")</td><td>@request.CurrentRevisionNumber</td><td><span class="status @request.Status.ToString().ToLowerInvariant()">@request.Status</span></td></tr>
+    }
+    </tbody></table>
+}
+</section>
+

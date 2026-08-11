@@ -1,0 +1,15 @@
+@model ReviseRequestViewModel
+@{ ViewData["Title"] = "Revise request"; }
+<div class="page-heading"><div><p class="eyebrow">Rejected request</p><h1>Revise and restart approval</h1><p>The new revision restarts at Manager and preserves all prior evidence.</p></div></div>
+<form method="post" enctype="multipart/form-data" class="panel form-panel narrow">
+    <input asp-for="RequestId" type="hidden" /><div asp-validation-summary="ModelOnly" class="validation"></div>
+    <div class="field"><label asp-for="Title"></label><input asp-for="Title" /><span asp-validation-for="Title"></span></div>
+    <div class="form-row"><div class="field"><label asp-for="Subcategory"></label><select asp-for="Subcategory"><option>One-Time Purchase</option><option>Subscription</option><option>Operational Expense</option></select></div><div class="field"><label asp-for="Amount"></label><input asp-for="Amount" type="number" step="0.01" /></div></div>
+    <div class="field"><label asp-for="Vendor"></label><input asp-for="Vendor" /></div>
+    <div class="field"><label asp-for="PurchaseLink"></label><input asp-for="PurchaseLink" /></div>
+    <div class="field"><label asp-for="BusinessJustification"></label><textarea asp-for="BusinessJustification" rows="5"></textarea></div>
+    <div class="field"><label asp-for="ChangeSummary">What changed?</label><textarea asp-for="ChangeSummary" rows="3"></textarea><span asp-validation-for="ChangeSummary"></span></div>
+    <div class="field"><label asp-for="SupportingDocuments">Updated supporting documents</label><input asp-for="SupportingDocuments" type="file" multiple /><span asp-validation-for="SupportingDocuments"></span></div>
+    <div class="form-actions"><a class="button" asp-action="Details" asp-route-id="@Model.RequestId">Cancel</a><button class="button primary" type="submit">Submit new revision</button></div>
+</form>
+

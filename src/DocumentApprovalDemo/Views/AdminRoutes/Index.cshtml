@@ -1,0 +1,14 @@
+@model IReadOnlyList<ApprovalRouteVersion>
+@{ ViewData["Title"] = "Route administration"; }
+<div class="page-heading"><div><p class="eyebrow">Central system administration</p><h1>Approval route versions</h1><p>Published versions are immutable. Create a draft to change rules or named approvers.</p></div><form asp-action="NewVersion" method="post"><button class="button primary" type="submit">Create next version</button></form></div>
+<section class="panel">
+<table><thead><tr><th>Version</th><th>Name</th><th>Status</th><th>President rule</th><th>Published</th><th></th></tr></thead><tbody>
+@foreach (var version in Model)
+{
+    var president = version.Stages.Single(x => x.Name == "President"); var rule = president.Rules.SingleOrDefault();
+    <tr><td>v@version.VersionNumber</td><td>@version.Name</td><td><span class="status @version.Status.ToString().ToLowerInvariant()">@version.Status</span></td><td>@if (rule is not null){<span>Amount @rule.Operator @rule.Value</span>}</td><td>@version.PublishedAtUtc?.ToLocalTime().ToString("g")</td><td>@if (version.Status == RouteVersionStatus.Draft){<a class="button small" asp-action="Edit" asp-route-id="@version.Id">Configure</a>}</td></tr>
+}
+</tbody></table>
+</section>
+<section class="notice"><strong>Evidence rule:</strong> a request always retains the route version used when it was submitted, even after a newer route is published.</section>
+

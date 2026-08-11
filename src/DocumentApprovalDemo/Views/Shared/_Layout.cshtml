@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@ViewData["Title"] · Approval Hub</title>
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+<header class="site-header">
+    <a class="brand" asp-controller="Home" asp-action="Index"><span class="brand-mark">✓</span> Approval Hub</a>
+    @if (User.Identity?.IsAuthenticated == true)
+    {
+        <nav aria-label="Primary navigation">
+            <a asp-controller="Home" asp-action="Index">Dashboard</a>
+            <a asp-controller="Requests" asp-action="Index">My requests</a>
+            <a asp-controller="Approvals" asp-action="Inbox">Approvals</a>
+            @if (User.IsInRole(Roles.SystemAdmin))
+            {
+                <a asp-controller="AdminRoutes" asp-action="Index">Route admin</a>
+            }
+        </nav>
+        <div class="user-menu">
+            <span>@User.Identity.Name</span>
+            <form asp-controller="Account" asp-action="Logout" method="post"><button class="link-button" type="submit">Switch user</button></form>
+        </div>
+    }
+</header>
+<main class="page-shell">
+    @if (TempData["Success"] is string success)
+    {
+        <div class="alert success">@success</div>
+    }
+    @if (TempData["Error"] is string error)
+    {
+        <div class="alert error">@error</div>
+    }
+    @RenderBody()
+</main>
+<footer>Demonstration environment · SQLite and local file storage · Not for production signatures</footer>
+@await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>
+
