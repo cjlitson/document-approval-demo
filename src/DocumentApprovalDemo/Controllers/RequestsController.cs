@@ -22,8 +22,10 @@ public sealed class RequestsController(
     public async Task<IActionResult> Index(CancellationToken cancellationToken)
     {
         var userId = currentUser.UserId!.Value;
-        return View(await db.Requests.AsNoTracking().Where(x => x.RequesterId == userId)
-            .OrderByDescending(x => x.CreatedAtUtc).ToListAsync(cancellationToken));
+        var requests = await db.Requests.AsNoTracking()
+            .Where(x => x.RequesterId == userId)
+            .ToListAsync(cancellationToken);
+        return View(requests.OrderByDescending(x => x.CreatedAtUtc).ToList());
     }
 
     [HttpGet("new")]
@@ -211,7 +213,15 @@ public sealed class RequestsController(
     private async Task<string> NextRequestNumberAsync(CancellationToken cancellationToken)
     {
         var year = DateTimeOffset.UtcNow.Year;
-        var count = await db.Requests.CountAsync(x => x.CreatedAtUtc.Year == year, cancellationToken) + 1;
-        return $"PR-{year}-{count:0000}";
+        var prefix = $"PR-{year}-";
+        var existingNumbers = await db.Requests.AsNoTracking()
+            .Where(x => x.RequestNumber.StartsWith(prefix))
+            .Select(x => x.RequestNumber)
+            .ToListAsync(cancellationToken);
+        var next = existingNumbers
+            .Select(x => int.TryParse(x[prefix.Length..], out var sequence) ? sequence : 0)
+            .DefaultIfEmpty(0)
+            .Max() + 1;
+        return $"{prefix}{next:0000}";
     }
 }
