@@ -1,6 +1,7 @@
 using System.Text;
 using DocumentApprovalDemo.Domain;
 using DocumentApprovalDemo.Services;
+using Xunit;
 
 namespace DocumentApprovalDemo.Tests;
 
@@ -39,4 +40,3 @@ public sealed class SignedPackageServiceTests
         Assert.EndsWith("%%EOF", text);
     }
 }
-

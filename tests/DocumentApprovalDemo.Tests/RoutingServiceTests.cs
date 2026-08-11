@@ -3,6 +3,7 @@ using DocumentApprovalDemo.Domain;
 using DocumentApprovalDemo.Services;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Xunit;
 
 namespace DocumentApprovalDemo.Tests;
 
@@ -45,4 +46,3 @@ public sealed class RoutingServiceTests
         Assert.True(service.ShouldIncludeStage(route.Stages.Single(x => x.Name == "VP Finance"), request));
     }
 }
-
