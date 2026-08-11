@@ -14,13 +14,18 @@ public sealed class HomeController(AppDbContext db, ICurrentUserService currentU
     public async Task<IActionResult> Index(CancellationToken cancellationToken)
     {
         var userId = currentUser.UserId!.Value;
+        var recentRequests = await db.Requests.AsNoTracking()
+            .Where(x => x.RequesterId == userId)
+            .ToListAsync(cancellationToken);
         var model = new DashboardViewModel
         {
             MyOpenRequests = await db.Requests.CountAsync(x => x.RequesterId == userId && (x.Status == RequestStatus.InApproval || x.Status == RequestStatus.Rejected), cancellationToken),
             MyPendingApprovals = await db.ApprovalInstances.CountAsync(x => x.ApproverId == userId && x.Status == ApprovalStatus.Pending, cancellationToken),
             ApprovedRequests = await db.Requests.CountAsync(x => x.RequesterId == userId && x.Status == RequestStatus.Approved, cancellationToken),
-            RecentRequests = await db.Requests.AsNoTracking().Where(x => x.RequesterId == userId)
-                .OrderByDescending(x => x.CreatedAtUtc).Take(5).ToListAsync(cancellationToken)
+            RecentRequests = recentRequests
+                .OrderByDescending(x => x.CreatedAtUtc)
+                .Take(5)
+                .ToList()
         };
         return View(model);
     }
@@ -28,4 +33,3 @@ public sealed class HomeController(AppDbContext db, ICurrentUserService currentU
     [AllowAnonymous]
     public IActionResult Error() => View();
 }
-
