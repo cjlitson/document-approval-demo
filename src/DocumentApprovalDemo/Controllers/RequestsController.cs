@@ -147,11 +147,13 @@ public sealed class RequestsController(
             try
             {
                 var stored = await fileStorage.SaveAsync(file, cancellationToken);
-                request.Attachments.Add(new RequestAttachment
+                var attachment = new RequestAttachment
                 {
                     Request = request, RevisionNumber = nextRevision, OriginalFileName = stored.OriginalFileName,
                     StoredFileName = stored.StoredFileName, ContentType = stored.ContentType, SizeBytes = stored.SizeBytes
-                });
+                };
+                request.Attachments.Add(attachment);
+                db.Attachments.Add(attachment);
             }
             catch (InvalidOperationException ex)
             {
@@ -213,4 +215,3 @@ public sealed class RequestsController(
         return $"PR-{year}-{count:0000}";
     }
 }
-

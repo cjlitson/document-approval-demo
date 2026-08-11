@@ -33,7 +33,7 @@ public sealed class WorkflowService(
             var approverId = stage.AssignmentType == "RequesterManager"
                 ? request.ConfirmedManagerId
                 : stage.NamedApproverId ?? throw new InvalidOperationException($"No approver is configured for {stage.Name}.");
-            request.Approvals.Add(new ApprovalInstance
+            var instance = new ApprovalInstance
             {
                 Request = request,
                 RevisionNumber = request.CurrentRevisionNumber,
@@ -43,7 +43,9 @@ public sealed class WorkflowService(
                 StageName = stage.Name,
                 ApproverId = approverId,
                 Status = ApprovalStatus.Queued
-            });
+            };
+            request.Approvals.Add(instance);
+            db.ApprovalInstances.Add(instance);
         }
 
         ActivateFirst(request);
@@ -85,6 +87,7 @@ public sealed class WorkflowService(
             Comments = comments?.Trim(),
             DecidedAtUtc = now
         };
+        db.ApprovalDecisions.Add(approval.Decision);
         db.AuditEvents.Add(Audit(approval.RequestId, actorId, "ApprovalDecision",
             $"{approval.StageName} {decision} for revision {approval.RevisionNumber}."));
 
@@ -137,13 +140,15 @@ public sealed class WorkflowService(
         request.CurrentRevisionNumber++;
         request.Status = RequestStatus.InApproval;
         request.CompletedAtUtc = null;
-        request.Revisions.Add(new RequestRevision
+        var revision = new RequestRevision
         {
             Request = request,
             RevisionNumber = request.CurrentRevisionNumber,
             ChangeSummary = changeSummary.Trim(),
             Status = RevisionStatus.InApproval
-        });
+        };
+        request.Revisions.Add(revision);
+        db.RequestRevisions.Add(revision);
         db.AuditEvents.Add(Audit(request.Id, actor.Id, "RequestRevised",
             $"Revision {request.CurrentRevisionNumber} created; approval restarted at stage one."));
         await db.SaveChangesAsync(cancellationToken);
@@ -165,4 +170,3 @@ public sealed class WorkflowService(
         RequestId = requestId, ActorUserId = actorId, EventType = type, Details = details
     };
 }
-
