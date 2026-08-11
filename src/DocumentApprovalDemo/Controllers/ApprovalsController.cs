@@ -16,9 +16,10 @@ public sealed class ApprovalsController(AppDbContext db, ICurrentUserService cur
     public async Task<IActionResult> Inbox(CancellationToken cancellationToken)
     {
         var userId = currentUser.UserId!.Value;
-        return View(await db.ApprovalInstances.AsNoTracking().Include(x => x.Request).ThenInclude(x => x.Requester)
+        var approvals = await db.ApprovalInstances.AsNoTracking().Include(x => x.Request).ThenInclude(x => x.Requester)
             .Where(x => x.ApproverId == userId && x.Status == ApprovalStatus.Pending)
-            .OrderBy(x => x.ActivatedAtUtc).ToListAsync(cancellationToken));
+            .ToListAsync(cancellationToken);
+        return View(approvals.OrderBy(x => x.ActivatedAtUtc).ToList());
     }
 
     [HttpGet("{id:guid}")]
@@ -50,4 +51,3 @@ public sealed class ApprovalsController(AppDbContext db, ICurrentUserService cur
         return RedirectToAction(nameof(Inbox));
     }
 }
-
