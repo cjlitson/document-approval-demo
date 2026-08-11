@@ -24,7 +24,7 @@ public sealed class ApplicationUser
     [MaxLength(100)] public string FullName { get; set; } = "";
     [MaxLength(200)] public string Email { get; set; } = "";
     [MaxLength(100)] public string Department { get; set; } = "";
-    [MaxLength(100)] public string RolesCsv { get; set; } = Roles.Requester;
+    [MaxLength(100)] public string RolesCsv { get; set; } = global::DocumentApprovalDemo.Domain.Roles.Requester;
     public Guid? ManagerId { get; set; }
     public ApplicationUser? Manager { get; set; }
     public bool IsActive { get; set; } = true;
@@ -186,4 +186,3 @@ public sealed class AuditEvent
     [MaxLength(4000)] public string Details { get; set; } = "";
     public DateTimeOffset OccurredAtUtc { get; set; } = DateTimeOffset.UtcNow;
 }
-
