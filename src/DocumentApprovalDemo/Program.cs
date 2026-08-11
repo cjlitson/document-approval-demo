@@ -23,6 +23,11 @@ var provider = builder.Configuration["Database:Provider"] ?? "Sqlite";
 var connectionString = builder.Configuration.GetConnectionString("ApprovalDatabase")
     ?? throw new InvalidOperationException("Connection string 'ApprovalDatabase' is missing.");
 
+if (provider.Equals("Sqlite", StringComparison.OrdinalIgnoreCase))
+{
+    SqliteDatabaseInitializer.EnsureParentDirectory(connectionString, builder.Environment.ContentRootPath);
+}
+
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
     if (provider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
@@ -71,4 +76,3 @@ await using (var scope = app.Services.CreateAsyncScope())
 await app.RunAsync();
 
 public partial class Program;
-
