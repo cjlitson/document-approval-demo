@@ -158,7 +158,8 @@ else
     protected override async Task OnInitializedAsync()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
-        DocumentTypes = await db.DocumentTypes.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.Name)
+        DocumentTypes = await db.DocumentTypes.AsNoTracking().Where(x => x.IsActive)
+            .OrderBy(x => x.Key == "purchase-request" ? 0 : 1).ThenBy(x => x.Name)
             .Select(x => new DocumentTypeSummary(x.Id, x.Name)).ToListAsync();
         Approvers = await db.Users.AsNoTracking().Where(x => x.IsActive && x.RolesCsv.Contains(Roles.Approver)).OrderBy(x => x.FullName).ToListAsync();
         if (DocumentTypes.Count > 0)

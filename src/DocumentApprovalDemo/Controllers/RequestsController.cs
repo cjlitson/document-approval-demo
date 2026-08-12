@@ -285,7 +285,7 @@ public sealed class RequestsController(
             var selected = await query.SingleOrDefaultAsync(x => x.Id == id.Value, cancellationToken);
             if (selected is not null) return selected;
         }
-        return await query.OrderBy(x => x.Name).FirstOrDefaultAsync(cancellationToken);
+        return await query.OrderBy(x => x.Key == "purchase-request" ? 0 : 1).ThenBy(x => x.Name).FirstOrDefaultAsync(cancellationToken);
     }
 
     private async Task PopulateFormAsync(RequestFormViewModel model, Guid userId, DocumentType type, CancellationToken cancellationToken)
@@ -293,7 +293,8 @@ public sealed class RequestsController(
         model.DocumentTypeId = type.Id;
         model.DocumentTypeName = type.Name;
         model.DocumentTypeDescription = type.Description;
-        model.DocumentTypes = await db.DocumentTypes.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.Name)
+        model.DocumentTypes = await db.DocumentTypes.AsNoTracking().Where(x => x.IsActive)
+            .OrderBy(x => x.Key == "purchase-request" ? 0 : 1).ThenBy(x => x.Name)
             .Select(x => new SelectListItem(x.Name, x.Id.ToString(), x.Id == type.Id)).ToListAsync(cancellationToken);
         model.Managers = await db.Users.AsNoTracking().Where(x => x.IsActive && x.Id != userId)
             .OrderBy(x => x.FullName).Select(x => new SelectListItem(x.FullName + " — " + x.Email, x.Id.ToString())).ToListAsync(cancellationToken);
