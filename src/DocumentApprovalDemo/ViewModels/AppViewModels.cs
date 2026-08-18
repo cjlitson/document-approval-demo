@@ -6,11 +6,217 @@ namespace DocumentApprovalDemo.ViewModels;
 
 public sealed class DashboardViewModel
 {
-    public int MyOpenRequests { get; init; }
     public int MyPendingApprovals { get; init; }
-    public int ApprovedRequests { get; init; }
+    public int ActiveRequests { get; init; }
+    public int NeedsAttention { get; init; }
+    public int CompletedLast30Days { get; init; }
     public int UnreadAlerts { get; init; }
-    public IReadOnlyList<ApprovalRequest> RecentRequests { get; init; } = [];
+    public IReadOnlyList<DashboardApprovalQueueItemViewModel> ApprovalQueue { get; init; } = [];
+    public IReadOnlyList<DashboardRequestViewModel> RecentRequests { get; init; } = [];
+    public IReadOnlyList<DashboardActivityItemViewModel> RecentActivity { get; init; } = [];
+}
+
+public sealed class DashboardApprovalQueueItemViewModel
+{
+    public Guid ApprovalId { get; init; }
+    public Guid RequestId { get; init; }
+    public string RequestNumber { get; init; } = "";
+    public string Title { get; init; } = "";
+    public string DocumentTypeName { get; init; } = "";
+    public string RequesterName { get; init; } = "";
+    public string StageName { get; init; } = "";
+    public DateTimeOffset? SubmittedAtUtc { get; init; }
+    public DateTimeOffset? ActivatedAtUtc { get; init; }
+}
+
+public sealed class DashboardRequestViewModel
+{
+    public Guid Id { get; init; }
+    public string RequestNumber { get; init; } = "";
+    public string Title { get; init; } = "";
+    public string DocumentTypeName { get; init; } = "";
+    public string CurrentStage { get; init; } = "";
+    public RequestStatus Status { get; init; }
+    public DateTimeOffset CreatedAtUtc { get; init; }
+}
+
+public sealed class DashboardActivityItemViewModel
+{
+    public Guid RequestId { get; init; }
+    public string RequestNumber { get; init; } = "";
+    public string EventType { get; init; } = "";
+    public string Details { get; init; } = "";
+    public string ActorName { get; init; } = "";
+    public DateTimeOffset OccurredAtUtc { get; init; }
+
+    public string Title => EventType switch
+    {
+        "RequestSubmitted" => "Request submitted",
+        "ApprovalDecision" => "Approval decision recorded",
+        "RequestApproved" => "Workflow completed",
+        "RequestRevised" => "Request revised",
+        _ => "Workflow activity"
+    };
+
+    public string Tone => EventType switch
+    {
+        "RequestApproved" => "success",
+        "ApprovalDecision" => "info",
+        "RequestRevised" => "warning",
+        _ => "neutral"
+    };
+}
+
+public sealed record MetricCardViewModel(
+    string Label,
+    int Value,
+    string Description,
+    string ActionLabel,
+    string ActionUrl,
+    string Icon,
+    string Tone = "neutral");
+
+public sealed record StatusBadgeViewModel(string Label, string Tone)
+{
+    public static StatusBadgeViewModel For(RequestStatus status) => status switch
+    {
+        RequestStatus.Draft => new("Draft", "neutral"),
+        RequestStatus.InApproval => new("In approval", "info"),
+        RequestStatus.Rejected => new("Needs revision", "danger"),
+        RequestStatus.Approved => new("Approved", "success"),
+        _ => new(status.ToString(), "neutral")
+    };
+
+    public static StatusBadgeViewModel For(ApprovalStatus status) => status switch
+    {
+        ApprovalStatus.Queued => new("Upcoming", "neutral"),
+        ApprovalStatus.Pending => new("Awaiting action", "info"),
+        ApprovalStatus.Approved => new("Approved", "success"),
+        ApprovalStatus.Rejected => new("Rejected", "danger"),
+        ApprovalStatus.Superseded => new("Superseded", "neutral"),
+        ApprovalStatus.Skipped => new("Skipped", "neutral"),
+        _ => new(status.ToString(), "neutral")
+    };
+
+    public static StatusBadgeViewModel For(NotificationStatus status) => status switch
+    {
+        NotificationStatus.Pending => new("Pending", "warning"),
+        NotificationStatus.Delivered => new("Delivered", "success"),
+        NotificationStatus.Failed => new("Failed", "danger"),
+        NotificationStatus.Cancelled => new("Cancelled", "neutral"),
+        _ => new(status.ToString(), "neutral")
+    };
+
+    public static StatusBadgeViewModel For(RouteVersionStatus status) => status switch
+    {
+        RouteVersionStatus.Draft => new("Draft", "warning"),
+        RouteVersionStatus.Published => new("Published", "success"),
+        RouteVersionStatus.Retired => new("Retired", "neutral"),
+        _ => new(status.ToString(), "neutral")
+    };
+}
+
+public sealed class RequestDetailsViewModel
+{
+    public required ApprovalRequest Request { get; init; }
+    public required RoutingHistoryViewModel RoutingHistory { get; init; }
+}
+
+public sealed class RoutingHistoryViewModel
+{
+    public int RevisionNumber { get; init; }
+    public int? RouteVersionNumber { get; init; }
+    public IReadOnlyList<RoutingHistoryItemViewModel> Items { get; init; } = [];
+
+    public static RoutingHistoryViewModel Create(ApprovalRequest request)
+    {
+        var items = new List<RoutingHistoryItemViewModel>();
+        items.Add(new RoutingHistoryItemViewModel
+        {
+            Title = request.SubmittedAtUtc.HasValue ? "Request submitted" : "Request created",
+            StatusLabel = request.SubmittedAtUtc.HasValue ? "Complete" : "Draft",
+            State = request.SubmittedAtUtc.HasValue ? "completed" : "current",
+            ActorName = request.Requester.FullName,
+            Detail = $"{request.DocumentType.Name} · revision {request.CurrentRevisionNumber}",
+            TimestampUtc = request.SubmittedAtUtc ?? request.CreatedAtUtc
+        });
+
+        var approvals = request.Approvals
+            .Where(x => x.RevisionNumber == request.CurrentRevisionNumber)
+            .OrderBy(x => x.Sequence)
+            .ToList();
+
+        for (var index = 0; index < approvals.Count; index++)
+        {
+            var approval = approvals[index];
+            var next = approvals.Skip(index + 1).FirstOrDefault();
+            var badge = StatusBadgeViewModel.For(approval.Status);
+            items.Add(new RoutingHistoryItemViewModel
+            {
+                Title = approval.StageName,
+                StatusLabel = badge.Label,
+                State = approval.Status switch
+                {
+                    ApprovalStatus.Approved => "completed",
+                    ApprovalStatus.Pending => "current",
+                    ApprovalStatus.Rejected => "error",
+                    ApprovalStatus.Queued => "future",
+                    ApprovalStatus.Superseded => "future",
+                    ApprovalStatus.Skipped => "future",
+                    _ => "future"
+                },
+                ActorName = approval.Approver.FullName,
+                Detail = approval.SignatureRequired ? "Adopted signature required" : "Signature optional",
+                Transition = approval.Status == ApprovalStatus.Approved && next is not null
+                    ? $"Routed to {next.StageName}."
+                    : null,
+                Signature = approval.Decision?.TypedSignature,
+                Comments = approval.Decision?.Comments,
+                TimestampUtc = approval.CompletedAtUtc ?? approval.ActivatedAtUtc
+            });
+        }
+
+        items.Add(new RoutingHistoryItemViewModel
+        {
+            Title = "Workflow completed",
+            StatusLabel = request.Status switch
+            {
+                RequestStatus.Approved => "Complete",
+                RequestStatus.Rejected => "Waiting for revision",
+                _ => "Pending"
+            },
+            State = request.Status switch
+            {
+                RequestStatus.Approved => "completed",
+                RequestStatus.Rejected => "error",
+                _ => "future"
+            },
+            Detail = request.Status == RequestStatus.Approved
+                ? "All required approval stages are complete."
+                : "Completes after every required stage is approved.",
+            TimestampUtc = request.CompletedAtUtc
+        });
+
+        return new RoutingHistoryViewModel
+        {
+            RevisionNumber = request.CurrentRevisionNumber,
+            RouteVersionNumber = request.RouteVersion?.VersionNumber,
+            Items = items
+        };
+    }
+}
+
+public sealed class RoutingHistoryItemViewModel
+{
+    public string Title { get; init; } = "";
+    public string StatusLabel { get; init; } = "";
+    public string State { get; init; } = "future";
+    public string? ActorName { get; init; }
+    public string? Detail { get; init; }
+    public string? Transition { get; init; }
+    public string? Signature { get; init; }
+    public string? Comments { get; init; }
+    public DateTimeOffset? TimestampUtc { get; init; }
 }
 
 public sealed class RequestFormViewModel

@@ -1,28 +1,103 @@
 @model DashboardViewModel
-@{ ViewData["Title"] = "Dashboard"; }
-<div class="page-heading">
-    <div><p class="eyebrow">Reusable approval platform prototype</p><h1>Good day, @User.Identity?.Name</h1><p>Route different document types, complete signed approvals, and audit every alert.</p></div>
-    <a class="button primary" asp-controller="Requests" asp-action="Create">+ New request</a>
-</div>
-<div class="metric-grid">
-    <article class="metric"><span>Open requests</span><strong>@Model.MyOpenRequests</strong><a asp-controller="Requests" asp-action="Index">View requests →</a></article>
-    <article class="metric accent"><span>Waiting on me</span><strong>@Model.MyPendingApprovals</strong><a asp-controller="Approvals" asp-action="Inbox">Open inbox →</a></article>
-    <article class="metric"><span>Approved</span><strong>@Model.ApprovedRequests</strong><a asp-controller="Requests" asp-action="Index">View packages →</a></article>
-    <article class="metric"><span>Unread alerts</span><strong>@Model.UnreadAlerts</strong><a asp-controller="Notifications" asp-action="Index">Open notification center →</a></article>
-</div>
-<section class="panel">
-    <div class="panel-heading"><div><h2>Recent requests</h2><p>Your latest document submissions.</p></div><a asp-controller="Requests" asp-action="Index">View all</a></div>
-    @if (Model.RecentRequests.Count == 0)
+@{
+    ViewData["Title"] = "Dashboard";
+    var metrics = new[]
     {
-        <div class="empty-state compact"><p>No requests yet.</p></div>
-    }
-    else
+        new MetricCardViewModel(
+            "My approvals",
+            Model.MyPendingApprovals,
+            "Requests waiting for your decision",
+            "Open approval queue",
+            Url.Action("Inbox", "Approvals") ?? "/approvals",
+            "approval",
+            Model.MyPendingApprovals > 0 ? "info" : "neutral"),
+        new MetricCardViewModel(
+            "Active requests",
+            Model.ActiveRequests,
+            "Your requests moving through a workflow",
+            "View my requests",
+            Url.Action("Index", "Requests") ?? "/requests",
+            "active"),
+        new MetricCardViewModel(
+            "Needs attention",
+            Model.NeedsAttention,
+            "Rejected requests ready for revision",
+            "Review requests",
+            Url.Action("Index", "Requests") ?? "/requests",
+            "attention",
+            Model.NeedsAttention > 0 ? "danger" : "neutral"),
+        new MetricCardViewModel(
+            "Completed",
+            Model.CompletedLast30Days,
+            "Approved requests in the last 30 days",
+            "View completed requests",
+            Url.Action("Index", "Requests") ?? "/requests",
+            "completed",
+            "success")
+    };
+}
+
+<div class="page-heading dashboard-heading">
+    <div>
+        <p class="eyebrow">Document routing</p>
+        <h1>Dashboard</h1>
+        <p>Here's what needs your attention.</p>
+    </div>
+    <a class="button primary" asp-controller="Requests" asp-action="Create">
+        <svg class="button-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12" /></svg>
+        New request
+    </a>
+</div>
+
+<section class="metric-grid" aria-label="Workflow summary">
+    @foreach (var metric in metrics)
     {
-        <table><thead><tr><th>Request</th><th>Title</th><th>Document type</th><th>Status</th></tr></thead><tbody>
-        @foreach (var request in Model.RecentRequests)
-        {
-            <tr><td><a asp-controller="Requests" asp-action="Details" asp-route-id="@request.Id">@request.RequestNumber</a></td><td>@request.Title</td><td>@request.DocumentType.Name</td><td><span class="status @request.Status.ToString().ToLowerInvariant()">@request.Status</span></td></tr>
-        }
-        </tbody></table>
+        <partial name="_MetricCard" model="@metric" />
     }
 </section>
+
+<partial name="_ApprovalQueue" model="@Model.ApprovalQueue" />
+
+<div class="dashboard-secondary-grid">
+    <section class="panel recent-requests" aria-labelledby="recent-requests-title">
+        <div class="panel-heading">
+            <div>
+                <h2 id="recent-requests-title">Recent requests</h2>
+                <p>Your latest submissions and their current workflow stage.</p>
+            </div>
+            <a asp-controller="Requests" asp-action="Index">View all</a>
+        </div>
+        @if (Model.RecentRequests.Count == 0)
+        {
+            <div class="empty-state compact">
+                <p>No requests yet. Start one when you're ready.</p>
+            </div>
+        }
+        else
+        {
+            <div class="table-scroll">
+                <table class="data-table compact-table">
+                    <thead>
+                    <tr><th>Request</th><th>Current stage</th><th>Status</th><th>Created</th></tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var request in Model.RecentRequests)
+                    {
+                        <tr class="clickable-row" data-href="/requests/@request.Id" tabindex="0">
+                            <td>
+                                <a class="request-link" asp-controller="Requests" asp-action="Details" asp-route-id="@request.Id">@request.Title</a>
+                                <small>@request.RequestNumber · @request.DocumentTypeName</small>
+                            </td>
+                            <td>@request.CurrentStage</td>
+                            <td><partial name="_StatusBadge" model="@StatusBadgeViewModel.For(request.Status)" /></td>
+                            <td>@request.CreatedAtUtc.ToLocalTime().ToString("MMM d, yyyy")</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    <partial name="_ActivityList" model="@Model.RecentActivity" />
+</div>

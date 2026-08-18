@@ -1,0 +1,66 @@
+@model IReadOnlyList<DashboardApprovalQueueItemViewModel>
+@functions {
+    private static string AgeLabel(DateTimeOffset? activatedAtUtc)
+    {
+        if (!activatedAtUtc.HasValue) return "New";
+        var age = DateTimeOffset.UtcNow - activatedAtUtc.Value;
+        if (age.TotalHours < 1) return "Less than 1 hour";
+        if (age.TotalDays < 1) return $"{Math.Max(1, (int)age.TotalHours)}h";
+        var days = Math.Max(1, (int)age.TotalDays);
+        return days == 1 ? "1 day" : $"{days} days";
+    }
+}
+
+<section class="panel dashboard-primary" aria-labelledby="approval-queue-title">
+    <div class="panel-heading">
+        <div>
+            <h2 id="approval-queue-title">My approval queue</h2>
+            <p>Requests currently waiting for your review and signature.</p>
+        </div>
+        <a asp-controller="Approvals" asp-action="Inbox">View all</a>
+    </div>
+    @if (Model.Count == 0)
+    {
+        <div class="empty-state compact queue-empty">
+            <span class="empty-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6" /></svg>
+            </span>
+            <div><h3>You're all caught up</h3><p>No approvals are waiting for your action.</p></div>
+        </div>
+    }
+    else
+    {
+        <div class="table-scroll">
+            <table class="data-table approval-table">
+                <thead>
+                <tr>
+                    <th>Request</th>
+                    <th>Document type</th>
+                    <th>Requester</th>
+                    <th>Submitted</th>
+                    <th>Status</th>
+                    <th>Age</th>
+                    <th><span class="visually-hidden">Action</span></th>
+                </tr>
+                </thead>
+                <tbody>
+                @foreach (var approval in Model)
+                {
+                    <tr class="clickable-row" data-href="/approvals/@approval.ApprovalId" tabindex="0">
+                        <td>
+                            <a class="request-link" asp-controller="Approvals" asp-action="Review" asp-route-id="@approval.ApprovalId">@approval.Title</a>
+                            <small>@approval.RequestNumber · @approval.StageName</small>
+                        </td>
+                        <td>@approval.DocumentTypeName</td>
+                        <td>@approval.RequesterName</td>
+                        <td>@approval.SubmittedAtUtc?.ToLocalTime().ToString("MMM d, yyyy")</td>
+                        <td><partial name="_StatusBadge" model="@StatusBadgeViewModel.For(ApprovalStatus.Pending)" /></td>
+                        <td><span class="age-label">@AgeLabel(approval.ActivatedAtUtc)</span></td>
+                        <td><a class="row-action" asp-controller="Approvals" asp-action="Review" asp-route-id="@approval.ApprovalId" aria-label="Review @approval.RequestNumber">Review <span aria-hidden="true">→</span></a></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>

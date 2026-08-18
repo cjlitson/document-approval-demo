@@ -1,6 +1,6 @@
 @model ApprovalInstance
 @{ ViewData["Title"] = "Review approval"; var decision = (ApprovalDecisionViewModel)ViewBag.Decision; var fields = Model.Request.FieldValues.Where(x => x.RevisionNumber == Model.RevisionNumber).OrderBy(x => x.Sequence).ToList(); }
-<div class="page-heading"><div><p class="eyebrow">@Model.Request.DocumentType.Name · @Model.StageName · @Model.Request.RequestNumber</p><h1>@Model.Request.Title</h1><p>Submitted by @Model.Request.Requester.FullName</p></div><span class="status pending">Signature required</span></div>
+<div class="page-heading"><div><p class="eyebrow">@Model.Request.DocumentType.Name · @Model.StageName · @Model.Request.RequestNumber</p><h1>@Model.Request.Title</h1><p>Submitted by @Model.Request.Requester.FullName</p></div><partial name="_StatusBadge" model="@StatusBadgeViewModel.For(Model.Status)" /></div>
 <div class="detail-grid">
     <div>
         <section class="panel detail-list"><h2>Request summary</h2><dl><div><dt>Document type</dt><dd>@Model.Request.DocumentType.Name</dd></div><div><dt>Department</dt><dd>@Model.Request.Department</dd></div><div><dt>Revision</dt><dd>@Model.RevisionNumber</dd></div>

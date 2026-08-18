@@ -11,7 +11,7 @@ else
     <table><thead><tr><th>Request</th><th>Document type</th><th>Requester</th><th>Stage</th><th>Waiting since</th><th></th></tr></thead><tbody>
     @foreach (var approval in Model)
     {
-        <tr><td><strong>@approval.Request.RequestNumber</strong><small>@approval.Request.Title</small></td><td>@approval.Request.DocumentType.Name</td><td>@approval.Request.Requester.FullName</td><td>@approval.StageName</td><td>@approval.ActivatedAtUtc?.ToLocalTime().ToString("g")</td><td><a class="button small" asp-action="Review" asp-route-id="@approval.Id">Review and sign</a></td></tr>
+        <tr class="clickable-row" data-href="/approvals/@approval.Id" tabindex="0"><td><strong>@approval.Request.RequestNumber</strong><small>@approval.Request.Title</small></td><td>@approval.Request.DocumentType.Name</td><td>@approval.Request.Requester.FullName</td><td>@approval.StageName</td><td>@approval.ActivatedAtUtc?.ToLocalTime().ToString("g")</td><td><a class="button small" asp-action="Review" asp-route-id="@approval.Id">Review and sign</a></td></tr>
     }
     </tbody></table>
 }

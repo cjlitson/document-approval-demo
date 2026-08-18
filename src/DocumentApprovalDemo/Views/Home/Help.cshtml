@@ -1,0 +1,45 @@
+@{
+    ViewData["Title"] = "Help";
+}
+
+<div class="page-heading">
+    <div>
+        <p class="eyebrow">Help center</p>
+        <h1>Document Routing help</h1>
+        <p>A quick guide to submitting, approving, and administering document workflows.</p>
+    </div>
+</div>
+
+<div class="help-grid">
+    <section class="panel help-card">
+        <span class="help-card-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M8 13h8M8 17h5" /></svg></span>
+        <h2>Submit a request</h2>
+        <p>Choose a document type, complete its configured fields, confirm the manager, and attach supporting documents.</p>
+        <a asp-controller="Requests" asp-action="Create">Start a new request <span aria-hidden="true">→</span></a>
+    </section>
+    <section class="panel help-card">
+        <span class="help-card-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg></span>
+        <h2>Complete an approval</h2>
+        <p>Open an assigned request, review its current revision, type your authenticated full name, then approve or reject.</p>
+        <a asp-controller="Approvals" asp-action="Inbox">Open my approvals <span aria-hidden="true">→</span></a>
+    </section>
+    <section class="panel help-card">
+        <span class="help-card-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M12 16v.01M9.5 9a2.5 2.5 0 1 1 3.3 2.37c-.8.3-.8.88-.8 1.63" /></svg></span>
+        <h2>Track workflow progress</h2>
+        <p>Request details show the active stage, approvers, signatures, comments, routing transitions, files, and revision history.</p>
+        <a asp-controller="Requests" asp-action="Index">View my requests <span aria-hidden="true">→</span></a>
+    </section>
+    @if (User.IsInRole(Roles.SystemAdmin))
+    {
+        <section class="panel help-card">
+            <span class="help-card-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M9 18h6" /><circle cx="7" cy="6" r="2" /><circle cx="15" cy="12" r="2" /><circle cx="11" cy="18" r="2" /></svg></span>
+            <h2>Configure workflows</h2>
+            <p>Create a draft route version, adjust stages, conditions, assignees, and alerts, simulate it, then publish for new requests.</p>
+            <a href="/route-designer">Open workflow designer <span aria-hidden="true">→</span></a>
+        </section>
+    }
+</div>
+
+<section class="notice help-notice">
+    <strong>Prototype boundary:</strong> Email and Teams delivery is simulated, files use local storage, and the demo identity selector represents Microsoft Entra ID authentication planned for production.
+</section>

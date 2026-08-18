@@ -1,0 +1,38 @@
+@model IReadOnlyList<DocumentType>
+@{
+    ViewData["Title"] = "Document types";
+}
+
+<div class="page-heading">
+    <div><p class="eyebrow">Configuration</p><h1>Document types</h1><p>Configured intake definitions and their published workflow coverage.</p></div>
+    <a class="button primary" href="/route-designer">Open workflow designer</a>
+</div>
+
+<div class="document-type-grid">
+    @foreach (var type in Model)
+    {
+        var published = type.Routes.SelectMany(x => x.Versions)
+            .Where(x => x.Status == RouteVersionStatus.Published)
+            .OrderByDescending(x => x.VersionNumber)
+            .FirstOrDefault();
+        <article class="panel document-type-card">
+            <div class="document-type-heading">
+                <span class="document-type-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M8 13h8M8 17h5" /></svg></span>
+                <div><h2>@type.Name</h2><code>@type.Key</code></div>
+                <span class="configuration-state @(type.IsActive ? "active" : "inactive")">@(type.IsActive ? "Active" : "Inactive")</span>
+            </div>
+            <p>@type.Description</p>
+            <dl>
+                <div><dt>Fields</dt><dd>@type.Fields.Count</dd></div>
+                <div><dt>Number prefix</dt><dd>@type.NumberPrefix</dd></div>
+                <div><dt>Published route</dt><dd>@(published is null ? "Not configured" : $"Version {published.VersionNumber}")</dd></div>
+            </dl>
+            <div class="document-type-actions">
+                <a asp-controller="Requests" asp-action="Create" asp-route-documentTypeId="@type.Id">Preview intake</a>
+                <a href="/route-designer">View workflow <span aria-hidden="true">→</span></a>
+            </div>
+        </article>
+    }
+</div>
+
+<section class="notice"><strong>First-pass scope:</strong> this is a read-only configuration catalog. Editing document definitions remains a later administration-design pass.</section>

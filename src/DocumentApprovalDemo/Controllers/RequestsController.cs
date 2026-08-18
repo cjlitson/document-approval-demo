@@ -144,7 +144,11 @@ public sealed class RequestsController(
         var request = await LoadDetailsAsync(id, cancellationToken);
         if (request is null) return NotFound();
         if (!await CanViewAsync(request, cancellationToken)) return Forbid();
-        return View(request);
+        return View(new RequestDetailsViewModel
+        {
+            Request = request,
+            RoutingHistory = RoutingHistoryViewModel.Create(request)
+        });
     }
 
     [HttpGet("{id:guid}/revise")]

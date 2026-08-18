@@ -1,0 +1,27 @@
+@model MetricCardViewModel
+
+<article class="metric-card @Model.Tone">
+    <div class="metric-card-heading">
+        <span class="metric-icon" aria-hidden="true">
+            @switch (Model.Icon)
+            {
+                case "approval":
+                    <svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
+                    break;
+                case "active":
+                    <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M8 13h8M8 17h5" /></svg>
+                    break;
+                case "attention":
+                    <svg viewBox="0 0 24 24"><path d="M10.3 2.9 1.8 17a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 2.9a2 2 0 0 0-3.4 0z" /><path d="M12 9v4M12 17h.01" /></svg>
+                    break;
+                default:
+                    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="m8 12 2.5 2.5L16 9" /></svg>
+                    break;
+            }
+        </span>
+        <span class="metric-label">@Model.Label</span>
+    </div>
+    <strong class="metric-value">@Model.Value</strong>
+    <p>@Model.Description</p>
+    <a class="metric-link" href="@Model.ActionUrl">@Model.ActionLabel <span aria-hidden="true">→</span></a>
+</article>

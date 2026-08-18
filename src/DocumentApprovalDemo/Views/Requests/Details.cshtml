@@ -1,42 +1,107 @@
-@model ApprovalRequest
-@{ ViewData["Title"] = Model.RequestNumber; var currentFields = Model.FieldValues.Where(x => x.RevisionNumber == Model.CurrentRevisionNumber).OrderBy(x => x.Sequence).ToList(); }
-<div class="page-heading">
-    <div><p class="eyebrow">@Model.DocumentType.Name · @Model.RequestNumber · Revision @Model.CurrentRevisionNumber</p><h1>@Model.Title</h1><p>@Model.Department · submitted by @Model.Requester.FullName</p></div>
+@model RequestDetailsViewModel
+@{
+    var request = Model.Request;
+    ViewData["Title"] = request.RequestNumber;
+    var currentFields = request.FieldValues
+        .Where(x => x.RevisionNumber == request.CurrentRevisionNumber)
+        .OrderBy(x => x.Sequence)
+        .ToList();
+    var isRequester = request.RequesterId.ToString() == User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+}
+
+<div class="page-heading request-detail-heading">
+    <div>
+        <p class="eyebrow">@request.DocumentType.Name · @request.RequestNumber</p>
+        <h1>@request.Title</h1>
+        <p>@request.Department · submitted by @request.Requester.FullName · revision @request.CurrentRevisionNumber</p>
+    </div>
     <div class="heading-actions">
-        <span class="status large @Model.Status.ToString().ToLowerInvariant()">@Model.Status</span>
-        @if (Model.Status == RequestStatus.Rejected && Model.RequesterId.ToString() == User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value)
+        <partial name="_StatusBadge" model="@StatusBadgeViewModel.For(request.Status)" />
+        @if (request.Status == RequestStatus.Rejected && isRequester)
         {
-            <a class="button primary" asp-action="Revise" asp-route-id="@Model.Id">Revise and resubmit</a>
+            <a class="button primary" asp-action="Revise" asp-route-id="@request.Id">Revise and resubmit</a>
         }
-        @if (Model.Status == RequestStatus.Approved)
+        @if (request.Status == RequestStatus.Approved)
         {
-            <a class="button primary" asp-action="SignedPackage" asp-route-id="@Model.Id">Download signed package</a>
+            <a class="button primary" asp-action="SignedPackage" asp-route-id="@request.Id">
+                <svg class="button-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v10M6 9l4 4 4-4M4 16h12" /></svg>
+                Download signed package
+            </a>
         }
     </div>
 </div>
-<div class="detail-grid">
+
+<div class="detail-grid request-detail-grid">
     <div>
-        <section class="panel detail-list"><h2>Document data</h2>
-            <dl><div><dt>Requester</dt><dd>@Model.Requester.FullName<br /><small>@Model.Requester.Email</small></dd></div><div><dt>Confirmed manager</dt><dd>@Model.ConfirmedManager.FullName<br /><small>@Model.ManagerSource</small></dd></div>
-            @foreach (var field in currentFields)
-            {
-                <div><dt>@field.Label</dt><dd>@if (field.FieldType == DocumentFieldType.Url && !string.IsNullOrWhiteSpace(field.Value)){<a href="@field.Value" rel="noreferrer" target="_blank">Open link ↗</a>}else if (field.FieldType == DocumentFieldType.Currency && decimal.TryParse(field.Value, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var amount)){@amount.ToString("C")}else{<span class="preserve">@(field.DisplayValue ?? field.Value)</span>}</dd></div>
-            }
+        <section class="panel detail-list">
+            <div class="panel-heading inset-heading">
+                <div><h2>Request information</h2><p>Current revision data used by the workflow.</p></div>
+            </div>
+            <dl>
+                <div><dt>Requester</dt><dd>@request.Requester.FullName<br /><small>@request.Requester.Email</small></dd></div>
+                <div><dt>Confirmed manager</dt><dd>@request.ConfirmedManager.FullName<br /><small>@request.ManagerSource</small></dd></div>
+                @foreach (var field in currentFields)
+                {
+                    <div>
+                        <dt>@field.Label</dt>
+                        <dd>
+                            @if (field.FieldType == DocumentFieldType.Url && !string.IsNullOrWhiteSpace(field.Value))
+                            {
+                                <a href="@field.Value" rel="noreferrer" target="_blank">Open link <span aria-hidden="true">↗</span></a>
+                            }
+                            else if (field.FieldType == DocumentFieldType.Currency && decimal.TryParse(field.Value, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var amount))
+                            {
+                                @amount.ToString("C")
+                            }
+                            else
+                            {
+                                <span class="preserve">@(field.DisplayValue ?? field.Value)</span>
+                            }
+                        </dd>
+                    </div>
+                }
             </dl>
         </section>
-        <section class="panel"><div class="panel-heading"><div><h2>Supporting documents</h2><p>Original files are retained with their revision.</p></div></div>
-            <ul class="file-list">@foreach (var file in Model.Attachments.OrderByDescending(x => x.RevisionNumber)){<li><div><strong>@file.OriginalFileName</strong><small>Revision @file.RevisionNumber · @((file.SizeBytes / 1024d).ToString("N1")) KB</small></div><a asp-action="Attachment" asp-route-requestId="@Model.Id" asp-route-attachmentId="@file.Id">Download</a></li>}</ul>
+
+        <section class="panel">
+            <div class="panel-heading">
+                <div><h2>Supporting documents</h2><p>Original files retained with each revision.</p></div>
+            </div>
+            @if (request.Attachments.Count == 0)
+            {
+                <div class="empty-state compact"><p>No supporting documents are attached.</p></div>
+            }
+            else
+            {
+                <ul class="file-list">
+                    @foreach (var file in request.Attachments.OrderByDescending(x => x.RevisionNumber).ThenBy(x => x.OriginalFileName))
+                    {
+                        <li>
+                            <span class="file-icon" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="M6 2h5l4 4v12H6z" /><path d="M11 2v4h4" /></svg></span>
+                            <div><strong>@file.OriginalFileName</strong><small>Revision @file.RevisionNumber · @((file.SizeBytes / 1024d).ToString("N1")) KB</small></div>
+                            <a asp-action="Attachment" asp-route-requestId="@request.Id" asp-route-attachmentId="@file.Id">Download</a>
+                        </li>
+                    }
+                </ul>
+            }
         </section>
     </div>
+
     <aside>
-        <section class="panel"><div class="panel-heading"><div><h2>Approval route</h2><p>Immutable route version @Model.RouteVersion?.VersionNumber</p></div></div>
-            <ol class="timeline">
-            @foreach (var approval in Model.Approvals.Where(x => x.RevisionNumber == Model.CurrentRevisionNumber).OrderBy(x => x.Sequence))
-            {
-                <li class="@approval.Status.ToString().ToLowerInvariant()"><span class="timeline-marker">@approval.Sequence</span><div><strong>@approval.StageName</strong><small>@approval.Approver.FullName · @approval.Status · signature @(approval.SignatureRequired ? "required" : "optional")</small>@if (approval.Decision is not null){<p>Signed “@approval.Decision.TypedSignature”<br />@approval.Decision.DecidedAtUtc.ToLocalTime().ToString("g")</p>@if (!string.IsNullOrWhiteSpace(approval.Decision.Comments)){<p class="comments">@approval.Decision.Comments</p>}}</div></li>
-            }
-            </ol>
+        <partial name="_RoutingHistory" model="@Model.RoutingHistory" />
+
+        <section class="panel">
+            <div class="panel-heading"><div><h2>Revision history</h2><p>Prior submissions and restart evidence.</p></div></div>
+            <ul class="revision-list">
+                @foreach (var revision in request.Revisions.OrderByDescending(x => x.RevisionNumber))
+                {
+                    <li>
+                        <div><strong>Revision @revision.RevisionNumber</strong><span class="revision-status">@revision.Status</span></div>
+                        <small>@revision.SubmittedAtUtc.ToLocalTime().ToString("MMM d, yyyy 'at' h:mm tt")</small>
+                        <p>@revision.ChangeSummary</p>
+                    </li>
+                }
+            </ul>
         </section>
-        <section class="panel"><h2>Revision history</h2><ul class="revision-list">@foreach (var revision in Model.Revisions.OrderByDescending(x => x.RevisionNumber)){<li><strong>Revision @revision.RevisionNumber · @revision.Status</strong><small>@revision.SubmittedAtUtc.ToLocalTime().ToString("g")</small><p>@revision.ChangeSummary</p></li>}</ul></section>
     </aside>
 </div>

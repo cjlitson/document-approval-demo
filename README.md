@@ -15,6 +15,10 @@ A .NET 10 demonstration of a reusable document-approval platform. ASP.NET Core M
 - Supporting documents are required, and final approval produces a signed-package PDF while retaining the originals.
 - Alert policies are versioned with each stage. Assignment, reminder, escalation, and outcome events create idempotent SQL outbox records for in-app, Email, and Teams channels.
 - A background dispatcher simulates channel delivery, records attempts, and cancels obsolete reminders/escalations when a stage completes.
+- The enterprise application shell groups requester, approver, configuration, and administration work in a collapsible responsive sidebar while preserving the existing MVC and Blazor architecture.
+- The dashboard is action-first: real pending approvals, active requests, rejected requests needing revision, 30-day completions, recent requests, and accessible audit activity replace decorative analytics.
+- Request details use a reusable routing-history component built from the submitted request, current approval instances, signature evidence, comments, timestamps, and route version; no timeline events are hardcoded.
+- Administrators have read-only All Requests and Document Types catalog views in addition to the existing workflow designer and immutable version history.
 
 ## Run in Visual Studio 2026
 
