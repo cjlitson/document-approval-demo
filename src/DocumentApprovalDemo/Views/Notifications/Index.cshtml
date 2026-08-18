@@ -28,7 +28,7 @@ else
             <td><span class="channel @notification.Channel.ToString().ToLowerInvariant()">@notification.Channel</span></td>
             <td><strong>@notification.Subject</strong><small>@notification.Body</small></td>
             <td>@notification.DueAtUtc.ToLocalTime().ToString("g")</td>
-            <td><span class="status @notification.Status.ToString().ToLowerInvariant()">@notification.Status</span></td>
+            <td><partial name="_StatusBadge" model="@StatusBadgeViewModel.For(notification.Status)" /></td>
             <td>@if (notification.DeliveryAttempts.Count == 0){<span>—</span>}else{@foreach (var attempt in notification.DeliveryAttempts.OrderBy(x => x.AttemptNumber)){<small>#@attempt.AttemptNumber · @attempt.Result<br />@attempt.AttemptedAtUtc.ToLocalTime().ToString("g")</small>}}</td>
             <td><div class="table-actions">@if (!string.IsNullOrWhiteSpace(notification.ActionUrl)){<a class="button small" href="@notification.ActionUrl">Open</a>}@if (!notification.IsRead){<form asp-action="MarkRead" asp-route-id="@notification.Id" method="post"><button class="link-button dark" type="submit">Mark read</button></form>}</div></td>
         </tr>

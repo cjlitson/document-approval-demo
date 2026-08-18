@@ -33,6 +33,10 @@ public sealed class SqliteControllerQueryTests
         var model = Assert.IsType<DashboardViewModel>(result.Model);
 
         Assert.Equal(new[] { "Newer", "Older" }, model.RecentRequests.Select(x => x.Title));
+        Assert.Equal(2, model.ActiveRequests);
+        Assert.Equal(0, model.NeedsAttention);
+        Assert.Empty(model.ApprovalQueue);
+        Assert.Empty(model.RecentActivity);
     }
 
     private static ApprovalRequest CreateRequest(string number, string title, ApplicationUser requester, DocumentType documentType, DateTimeOffset createdAt) => new()

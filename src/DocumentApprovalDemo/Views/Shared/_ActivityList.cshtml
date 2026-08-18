@@ -1,0 +1,47 @@
+@model IReadOnlyList<DashboardActivityItemViewModel>
+
+<section class="panel activity-panel" aria-labelledby="recent-activity-title">
+    <div class="panel-heading">
+        <div>
+            <h2 id="recent-activity-title">Recent activity</h2>
+            <p>Workflow events for requests you can access.</p>
+        </div>
+    </div>
+    @if (Model.Count == 0)
+    {
+        <div class="empty-state compact"><p>Activity will appear after a request is submitted.</p></div>
+    }
+    else
+    {
+        <ol class="activity-list">
+            @foreach (var activity in Model)
+            {
+                <li>
+                    <span class="activity-icon @activity.Tone" aria-hidden="true">
+                        @if (activity.Tone == "success")
+                        {
+                            <svg viewBox="0 0 20 20"><path d="m5 10 3 3 7-7" /></svg>
+                        }
+                        else if (activity.Tone == "warning")
+                        {
+                            <svg viewBox="0 0 20 20"><path d="M10 5v5M10 14h.01" /></svg>
+                        }
+                        else
+                        {
+                            <svg viewBox="0 0 20 20"><path d="M10 5v5l3 2" /><circle cx="10" cy="10" r="7" /></svg>
+                        }
+                    </span>
+                    <div class="activity-content">
+                        <div class="activity-title-row">
+                            <strong>@activity.Title</strong>
+                            <time datetime="@activity.OccurredAtUtc.ToString("O")">@activity.OccurredAtUtc.ToLocalTime().ToString("MMM d, h:mm tt")</time>
+                        </div>
+                        <a asp-controller="Requests" asp-action="Details" asp-route-id="@activity.RequestId">@activity.RequestNumber</a>
+                        <p>@activity.Details</p>
+                        <small>@activity.ActorName</small>
+                    </div>
+                </li>
+            }
+        </ol>
+    }
+</section>
