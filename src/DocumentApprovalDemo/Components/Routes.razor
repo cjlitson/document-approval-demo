@@ -1,0 +1,15 @@
+<Router AppAssembly="typeof(Program).Assembly">
+    <Found Context="routeData">
+        <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(MainLayout)">
+            <NotAuthorized>
+                <LayoutView Layout="typeof(MainLayout)">
+                    <section class="panel empty-state"><h1>Access required</h1><p>Sign in as a central system administrator to use the route designer.</p><a class="button primary" href="/account/login?returnUrl=/route-designer">Sign in</a></section>
+                </LayoutView>
+            </NotAuthorized>
+        </AuthorizeRouteView>
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+    </Found>
+    <NotFound>
+        <LayoutView Layout="typeof(MainLayout)"><section class="panel empty-state"><h1>Page not found</h1><a href="/">Return to dashboard</a></section></LayoutView>
+    </NotFound>
+</Router>

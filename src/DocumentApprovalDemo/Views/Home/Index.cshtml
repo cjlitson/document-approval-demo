@@ -1,0 +1,28 @@
+@model DashboardViewModel
+@{ ViewData["Title"] = "Dashboard"; }
+<div class="page-heading">
+    <div><p class="eyebrow">Reusable approval platform prototype</p><h1>Good day, @User.Identity?.Name</h1><p>Route different document types, complete signed approvals, and audit every alert.</p></div>
+    <a class="button primary" asp-controller="Requests" asp-action="Create">+ New request</a>
+</div>
+<div class="metric-grid">
+    <article class="metric"><span>Open requests</span><strong>@Model.MyOpenRequests</strong><a asp-controller="Requests" asp-action="Index">View requests →</a></article>
+    <article class="metric accent"><span>Waiting on me</span><strong>@Model.MyPendingApprovals</strong><a asp-controller="Approvals" asp-action="Inbox">Open inbox →</a></article>
+    <article class="metric"><span>Approved</span><strong>@Model.ApprovedRequests</strong><a asp-controller="Requests" asp-action="Index">View packages →</a></article>
+    <article class="metric"><span>Unread alerts</span><strong>@Model.UnreadAlerts</strong><a asp-controller="Notifications" asp-action="Index">Open notification center →</a></article>
+</div>
+<section class="panel">
+    <div class="panel-heading"><div><h2>Recent requests</h2><p>Your latest document submissions.</p></div><a asp-controller="Requests" asp-action="Index">View all</a></div>
+    @if (Model.RecentRequests.Count == 0)
+    {
+        <div class="empty-state compact"><p>No requests yet.</p></div>
+    }
+    else
+    {
+        <table><thead><tr><th>Request</th><th>Title</th><th>Document type</th><th>Status</th></tr></thead><tbody>
+        @foreach (var request in Model.RecentRequests)
+        {
+            <tr><td><a asp-controller="Requests" asp-action="Details" asp-route-id="@request.Id">@request.RequestNumber</a></td><td>@request.Title</td><td>@request.DocumentType.Name</td><td><span class="status @request.Status.ToString().ToLowerInvariant()">@request.Status</span></td></tr>
+        }
+        </tbody></table>
+    }
+</section>

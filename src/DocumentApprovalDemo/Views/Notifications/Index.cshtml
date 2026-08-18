@@ -1,0 +1,38 @@
+@model NotificationCenterViewModel
+@{ ViewData["Title"] = "Notification center"; }
+<div class="page-heading">
+    <div><p class="eyebrow">SQL outbox demonstration</p><h1>Notification center</h1><p>In-app, Email, and Teams deliveries share one retryable audit trail.</p></div>
+    @if (User.IsInRole(Roles.SystemAdmin))
+    {
+        <form asp-action="SimulateDue" method="post"><button class="button primary" type="submit">Simulate all due now</button></form>
+    }
+</div>
+<div class="metric-grid">
+    <article class="metric"><span>Pending</span><strong>@Model.PendingCount</strong><small>Includes scheduled reminders and escalations</small></article>
+    <article class="metric accent"><span>Delivered</span><strong>@Model.DeliveredCount</strong><small>Simulated in this prototype</small></article>
+    <article class="metric"><span>Cancelled</span><strong>@Model.CancelledCount</strong><small>Stopped when a stage completed</small></article>
+</div>
+<section class="notice"><strong>Production boundary:</strong> the same outbox records would be delivered through Microsoft Graph or another approved provider. Approve/reject remains inside the authenticated application because every stage requires a typed signature.</section>
+<section class="panel">
+@if (Model.Notifications.Count == 0)
+{
+    <div class="empty-state"><h2>No alerts yet</h2><p>Submitting or advancing a request will create assignment, reminder, escalation, and outcome records.</p></div>
+}
+else
+{
+    <table><thead><tr><th>Event</th><th>Channel</th><th>Message</th><th>Due</th><th>Status</th><th>Delivery history</th><th></th></tr></thead><tbody>
+    @foreach (var notification in Model.Notifications)
+    {
+        <tr class="@(notification.IsRead ? "" : "unread-row")">
+            <td><strong>@notification.EventType</strong><small>@notification.Request?.RequestNumber</small></td>
+            <td><span class="channel @notification.Channel.ToString().ToLowerInvariant()">@notification.Channel</span></td>
+            <td><strong>@notification.Subject</strong><small>@notification.Body</small></td>
+            <td>@notification.DueAtUtc.ToLocalTime().ToString("g")</td>
+            <td><span class="status @notification.Status.ToString().ToLowerInvariant()">@notification.Status</span></td>
+            <td>@if (notification.DeliveryAttempts.Count == 0){<span>—</span>}else{@foreach (var attempt in notification.DeliveryAttempts.OrderBy(x => x.AttemptNumber)){<small>#@attempt.AttemptNumber · @attempt.Result<br />@attempt.AttemptedAtUtc.ToLocalTime().ToString("g")</small>}}</td>
+            <td><div class="table-actions">@if (!string.IsNullOrWhiteSpace(notification.ActionUrl)){<a class="button small" href="@notification.ActionUrl">Open</a>}@if (!notification.IsRead){<form asp-action="MarkRead" asp-route-id="@notification.Id" method="post"><button class="link-button dark" type="submit">Mark read</button></form>}</div></td>
+        </tr>
+    }
+    </tbody></table>
+}
+</section>

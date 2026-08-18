@@ -1,0 +1,405 @@
+@page "/route-designer"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = Roles.SystemAdmin)]
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>Route designer · Approval Hub</PageTitle>
+
+<div class="page-heading designer-heading">
+    <div><p class="eyebrow">Blazor configuration workspace</p><h1>Approval route designer</h1><p>Design form-aware stages, assignments, conditions, signatures, and alert policies without changing workflow code.</p></div>
+    @if (Route is not null)
+    {
+        <span class="status large @Route.Status.ToString().ToLowerInvariant()">@Route.Status · v@Route.VersionNumber</span>
+    }
+</div>
+
+@if (!string.IsNullOrWhiteSpace(Message))
+{
+    <div class="alert @(IsError ? "error" : "success")">@Message</div>
+}
+
+<section class="designer-toolbar panel">
+    <div class="field"><label>Document type</label><select value="@SelectedDocumentTypeId" @onchange="ChangeDocumentTypeAsync">@foreach (var type in DocumentTypes){<option value="@type.Id">@type.Name</option>}</select></div>
+    <div class="toolbar-actions">
+        <a class="button" href="/admin/routes">Version history</a>
+        @if (Route is not null && Route.Status != RouteVersionStatus.Draft)
+        {
+            <button class="button primary" @onclick="CreateDraftAsync">Create editable draft</button>
+        }
+        @if (IsDraft)
+        {
+            <button class="button" @onclick="SaveAsync">Save draft</button><button class="button primary" @onclick="PublishAsync">Publish version</button>
+        }
+    </div>
+</section>
+
+@if (Route is null)
+{
+    <section class="panel empty-state"><h2>No route configured</h2><p>Create a route for this document type in the database.</p></section>
+}
+else
+{
+    <section class="route-canvas panel">
+        <div class="panel-heading"><div><h2>Live route map</h2><p>Cards are evaluated top to bottom. Conditional cards may be skipped.</p></div><span>@Route.Stages.Count stage(s)</span></div>
+        <div class="route-map">
+        @foreach (var stage in Route.Stages.OrderBy(x => x.Sequence))
+        {
+            <article class="route-node @(stage.IsConditional ? "conditional" : "")">
+                <span class="node-number">@stage.Sequence</span><div><strong>@stage.Name</strong><small>@AssignmentLabel(stage)</small>@if (stage.IsConditional){<small>@stage.Rules.Count condition(s)</small>}<small>Signature required · @AlertSummary(stage)</small></div>
+            </article>
+        }
+        </div>
+    </section>
+
+    <div class="designer-grid">
+        <div>
+            <section class="panel form-panel route-metadata">
+                <div class="field"><label>Version label</label><input @bind="Route.Name" disabled="@(!IsDraft)" /></div>
+                <p class="help">Published versions are immutable. New requests use the latest published version; existing requests retain their submitted version.</p>
+            </section>
+
+            @foreach (var stage in Route.Stages.OrderBy(x => x.Sequence).ToList())
+            {
+                <section class="panel stage-editor">
+                    <div class="stage-editor-heading"><div><span class="node-number">@stage.Sequence</span><div><p class="eyebrow">Stage @stage.Sequence</p><h2>@stage.Name</h2></div></div>@if (IsDraft){<div class="table-actions"><button class="button small" @onclick="() => MoveStage(stage.ClientId, -1)">↑</button><button class="button small" @onclick="() => MoveStage(stage.ClientId, 1)">↓</button><button class="button small danger" @onclick="() => RemoveStage(stage.ClientId)">Remove</button></div>}</div>
+                    <div class="stage-form-grid">
+                        <div class="field"><label>Stage name</label><input @bind="stage.Name" disabled="@(!IsDraft)" /></div>
+                        <div class="field"><label>Assignment strategy</label><select @bind="stage.AssignmentStrategy" disabled="@(!IsDraft)">@foreach (var strategy in Enum.GetValues<AssignmentStrategy>()){<option value="@strategy">@StrategyLabel(strategy)</option>}</select></div>
+                        @if (stage.AssignmentStrategy == AssignmentStrategy.NamedUser)
+                        {
+                            <div class="field"><label>Named approver</label><select @bind="stage.NamedApproverId" disabled="@(!IsDraft)"><option value="">Select approver</option>@foreach (var user in Approvers){<option value="@user.Id">@user.FullName — @user.Email</option>}</select></div>
+                        }
+                        @if (stage.AssignmentStrategy == AssignmentStrategy.UserField)
+                        {
+                            <div class="field"><label>Person field</label><select @bind="stage.AssigneeFieldKey" disabled="@(!IsDraft)"><option value="">Select person field</option>@foreach (var field in CurrentFields.Where(x => x.FieldType == DocumentFieldType.User)){<option value="@field.Key">@field.Label</option>}</select></div>
+                        }
+                        <div class="locked-setting"><span>✓</span><div><strong>Adopted signature required</strong><small>Approver must type their authenticated full name.</small></div></div>
+                    </div>
+
+                    <details open="@stage.IsConditional"><summary>Conditions <span>@(stage.IsConditional ? "Configured" : "Always runs")</span></summary>
+                        <label class="check"><input type="checkbox" @bind="stage.IsConditional" disabled="@(!IsDraft)" /> Run this stage only when every condition matches</label>
+                        @if (stage.IsConditional)
+                        {
+                            <div class="condition-list">
+                            @foreach (var rule in stage.Rules.ToList())
+                            {
+                                <div class="condition-row"><select @bind="rule.FieldKey" disabled="@(!IsDraft)"><option value="">Field</option><option value="title">Request title</option><option value="department">Department</option>@foreach (var field in CurrentFields){<option value="@field.Key">@field.Label</option>}</select><select @bind="rule.Operator" disabled="@(!IsDraft)">@foreach (var op in Enum.GetValues<ComparisonOperator>()){<option value="@op">@OperatorLabel(op)</option>}</select><input @bind="rule.Value" placeholder="Comparison value" disabled="@(!IsDraft)" />@if (IsDraft){<button class="button small danger" @onclick="() => stage.Rules.Remove(rule)">×</button>}</div>
+                            }
+                            </div>
+                            @if (IsDraft){<button class="button small" @onclick="() => stage.Rules.Add(new RuleEditor())">+ Add condition</button>}
+                        }
+                    </details>
+
+                    <details><summary>Alert policy <span>@AlertSummary(stage)</span></summary>
+                        <div class="alert-policy-grid">
+                            @foreach (var alert in stage.Alerts.OrderBy(x => x.EventType))
+                            {
+                                <article class="alert-policy-card">
+                                    <div class="alert-policy-title"><strong>@alert.EventType</strong>@if (alert.EventType != AlertEventType.Assignment && alert.EventType != AlertEventType.Outcome){<label class="switch"><input type="checkbox" @bind="alert.Enabled" disabled="@(!IsDraft)" /> Enabled</label>}</div>
+                                    @if (alert.EventType is AlertEventType.Reminder or AlertEventType.Escalation)
+                                    {
+                                        <div class="field"><label>Delay in hours</label><input type="number" min="1" @bind="alert.DelayHours" disabled="@(!IsDraft || !alert.Enabled)" /></div>
+                                    }
+                                    @if (alert.EventType == AlertEventType.Escalation)
+                                    {
+                                        <div class="field"><label>Recipient</label><select @bind="alert.RecipientStrategy" disabled="@(!IsDraft || !alert.Enabled)"><option value="@AlertRecipientStrategy.ApproverManagerOrAdministrator">Approver manager; admin fallback</option><option value="@AlertRecipientStrategy.StageApprover">Stage approver</option><option value="@AlertRecipientStrategy.Requester">Requester</option></select></div>
+                                    }
+                                    <div class="channel-checks"><label><input type="checkbox" @bind="alert.InApp" disabled="@(!IsDraft || !alert.Enabled)" /> In-app</label><label><input type="checkbox" @bind="alert.Email" disabled="@(!IsDraft || !alert.Enabled)" /> Email</label><label><input type="checkbox" @bind="alert.Teams" disabled="@(!IsDraft || !alert.Enabled)" /> Teams</label></div>
+                                </article>
+                            }
+                        </div>
+                    </details>
+                </section>
+            }
+            @if (IsDraft)
+            {
+                <button class="button add-stage" @onclick="AddStage">+ Add approval stage</button>
+            }
+        </div>
+
+        <aside>
+            <section class="panel simulator">
+                <div class="panel-heading"><div><h2>Route simulator</h2><p>Try field values before publishing.</p></div></div>
+                <div class="simulator-fields">
+                    <div class="field"><label>Request title</label><input @bind="SimulationTitle" @bind:event="oninput" /></div>
+                    <div class="field"><label>Department</label><input @bind="SimulationDepartment" @bind:event="oninput" /></div>
+                    @foreach (var field in CurrentFields)
+                    {
+                        <div class="field"><label>@field.Label</label>@if (field.FieldType == DocumentFieldType.Choice){<select value="@GetSimulationValue(field.Key)" @onchange="@(e => SetSimulation(field.Key, e.Value?.ToString()))"><option value="">Select</option>@foreach (var option in field.Options){<option value="@option">@option</option>}</select>}else{<input type="@(field.FieldType == DocumentFieldType.Currency ? "number" : field.FieldType == DocumentFieldType.Date ? "date" : "text")" value="@GetSimulationValue(field.Key)" @oninput="@(e => SetSimulation(field.Key, e.Value?.ToString()))" />}</div>
+                    }
+                </div>
+                <ol class="simulation-results">
+                @foreach (var stage in Route.Stages.OrderBy(x => x.Sequence))
+                {
+                    var included = IsIncluded(stage);
+                    <li class="@(included ? "included" : "skipped")"><span>@(included ? "✓" : "—")</span><div><strong>@stage.Name</strong><small>@(included ? "Included" : "Skipped by condition")</small></div></li>
+                }
+                </ol>
+            </section>
+            <section class="notice"><strong>Alert safety:</strong> Email and Teams contain minimal context and link here. Decisions and typed signatures remain inside the authenticated application.</section>
+        </aside>
+    </div>
+}
+
+@code {
+    private List<DocumentTypeSummary> DocumentTypes { get; set; } = [];
+    private List<ApplicationUser> Approvers { get; set; } = [];
+    private List<DocumentFieldDefinition> CurrentFields { get; set; } = [];
+    private Dictionary<string, string> SimulationValues { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    private Guid SelectedDocumentTypeId { get; set; }
+    private RouteEditor? Route { get; set; }
+    private string? Message { get; set; }
+    private bool IsError { get; set; }
+    private bool IsDraft => Route?.Status == RouteVersionStatus.Draft;
+    private string SimulationTitle { get => GetSimulationValue("title"); set => SetSimulation("title", value); }
+    private string SimulationDepartment { get => GetSimulationValue("department"); set => SetSimulation("department", value); }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        DocumentTypes = await db.DocumentTypes.AsNoTracking().Where(x => x.IsActive)
+            .OrderBy(x => x.Key == "purchase-request" ? 0 : 1).ThenBy(x => x.Name)
+            .Select(x => new DocumentTypeSummary(x.Id, x.Name)).ToListAsync();
+        Approvers = await db.Users.AsNoTracking().Where(x => x.IsActive && x.RolesCsv.Contains(Roles.Approver)).OrderBy(x => x.FullName).ToListAsync();
+        if (DocumentTypes.Count > 0)
+        {
+            SelectedDocumentTypeId = DocumentTypes[0].Id;
+            await LoadRouteAsync();
+        }
+    }
+
+    private async Task ChangeDocumentTypeAsync(ChangeEventArgs args)
+    {
+        if (Guid.TryParse(args.Value?.ToString(), out var id)) SelectedDocumentTypeId = id;
+        Message = null;
+        await LoadRouteAsync();
+    }
+
+    private async Task LoadRouteAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        CurrentFields = await db.DocumentFields.AsNoTracking().Where(x => x.DocumentTypeId == SelectedDocumentTypeId).OrderBy(x => x.Sequence).ToListAsync();
+        SimulationValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["title"] = "", ["department"] = "" };
+        foreach (var field in CurrentFields) SimulationValues[field.Key] = "";
+        var versions = await db.RouteVersions.AsNoTracking()
+            .Include(x => x.Route)
+            .Include(x => x.Stages).ThenInclude(x => x.Rules)
+            .Include(x => x.Stages).ThenInclude(x => x.AlertPolicies)
+            .Where(x => x.Route.DocumentTypeId == SelectedDocumentTypeId)
+            .ToListAsync();
+        var version = versions.Where(x => x.Status == RouteVersionStatus.Draft).OrderByDescending(x => x.VersionNumber).FirstOrDefault()
+            ?? versions.Where(x => x.Status == RouteVersionStatus.Published).OrderByDescending(x => x.VersionNumber).FirstOrDefault();
+        Route = version is null ? null : Map(version);
+    }
+
+    private async Task CreateDraftAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var existing = await db.RouteVersions.AnyAsync(x => x.Route.DocumentTypeId == SelectedDocumentTypeId && x.Status == RouteVersionStatus.Draft);
+        if (existing)
+        {
+            Message = "An editable draft already exists for this document type."; IsError = true; await LoadRouteAsync(); return;
+        }
+        var source = await db.RouteVersions
+            .Include(x => x.Stages).ThenInclude(x => x.Rules)
+            .Include(x => x.Stages).ThenInclude(x => x.AlertPolicies)
+            .Where(x => x.Route.DocumentTypeId == SelectedDocumentTypeId && x.Status == RouteVersionStatus.Published)
+            .OrderByDescending(x => x.VersionNumber).FirstAsync();
+        var draft = new ApprovalRouteVersion
+        {
+            RouteId = source.RouteId, VersionNumber = source.VersionNumber + 1,
+            Name = $"{source.Name} v{source.VersionNumber + 1}", Status = RouteVersionStatus.Draft
+        };
+        foreach (var stage in source.Stages.OrderBy(x => x.Sequence)) draft.Stages.Add(CloneStage(stage, draft));
+        db.RouteVersions.Add(draft);
+        db.AuditEvents.Add(new AuditEvent { ActorUserId = await CurrentUserIdAsync(), EventType = "RouteDraftCreated", Details = $"Created route draft v{draft.VersionNumber}." });
+        await db.SaveChangesAsync();
+        Message = "Draft created. Published behavior is unchanged until you publish."; IsError = false;
+        await LoadRouteAsync();
+    }
+
+    private async Task SaveAsync()
+    {
+        if (await SaveEditorAsync()) { Message = "Draft saved. Route and alert changes are still unpublished."; IsError = false; await LoadRouteAsync(); }
+    }
+
+    private async Task PublishAsync()
+    {
+        if (!await SaveEditorAsync()) return;
+        var route = Route;
+        if (route is null) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        var draft = await db.RouteVersions.SingleAsync(x => x.Id == route.Id && x.Status == RouteVersionStatus.Draft);
+        var published = await db.RouteVersions.Where(x => x.RouteId == draft.RouteId && x.Status == RouteVersionStatus.Published).ToListAsync();
+        foreach (var version in published) version.Status = RouteVersionStatus.Retired;
+        draft.Status = RouteVersionStatus.Published;
+        draft.PublishedAtUtc = DateTimeOffset.UtcNow;
+        draft.PublishedById = await CurrentUserIdAsync();
+        db.AuditEvents.Add(new AuditEvent { ActorUserId = draft.PublishedById.Value, EventType = "RoutePublished", Details = $"Published route version {draft.VersionNumber} with {route.Stages.Count} stages." });
+        await db.SaveChangesAsync();
+        await transaction.CommitAsync();
+        Message = $"Version {draft.VersionNumber} published for new requests."; IsError = false;
+        await LoadRouteAsync();
+    }
+
+    private async Task<bool> SaveEditorAsync()
+    {
+        if (Route is null || !IsDraft) return false;
+        var errors = ValidateRoute();
+        if (errors.Count > 0) { Message = string.Join(" ", errors); IsError = true; return false; }
+        await using var db = await DbFactory.CreateDbContextAsync();
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        var version = await db.RouteVersions.Include(x => x.Stages).ThenInclude(x => x.Rules).Include(x => x.Stages).ThenInclude(x => x.AlertPolicies)
+            .SingleAsync(x => x.Id == Route.Id && x.Status == RouteVersionStatus.Draft);
+        version.Name = Route.Name.Trim();
+        db.RouteStages.RemoveRange(version.Stages);
+        await db.SaveChangesAsync();
+        foreach (var editor in Route.Stages.OrderBy(x => x.Sequence)) version.Stages.Add(ToEntity(editor, version));
+        db.AuditEvents.Add(new AuditEvent { ActorUserId = await CurrentUserIdAsync(), EventType = "RouteDraftSaved", Details = $"Saved route draft v{version.VersionNumber}." });
+        await db.SaveChangesAsync();
+        await transaction.CommitAsync();
+        return true;
+    }
+
+    private List<string> ValidateRoute()
+    {
+        var errors = new List<string>();
+        if (string.IsNullOrWhiteSpace(Route!.Name)) errors.Add("Enter a version label.");
+        if (Route.Stages.Count == 0) errors.Add("Add at least one stage.");
+        foreach (var stage in Route.Stages)
+        {
+            if (string.IsNullOrWhiteSpace(stage.Name)) errors.Add("Every stage needs a name.");
+            if (stage.AssignmentStrategy == AssignmentStrategy.NamedUser && !stage.NamedApproverId.HasValue) errors.Add($"Select a named approver for '{stage.Name}'.");
+            if (stage.AssignmentStrategy == AssignmentStrategy.UserField && string.IsNullOrWhiteSpace(stage.AssigneeFieldKey)) errors.Add($"Select a person field for '{stage.Name}'.");
+            if (stage.IsConditional && (stage.Rules.Count == 0 || stage.Rules.Any(x => string.IsNullOrWhiteSpace(x.FieldKey) || string.IsNullOrWhiteSpace(x.Value)))) errors.Add($"Complete at least one condition for '{stage.Name}'.");
+            var reminder = stage.Alerts.Single(x => x.EventType == AlertEventType.Reminder);
+            var escalation = stage.Alerts.Single(x => x.EventType == AlertEventType.Escalation);
+            if (reminder.Enabled && reminder.DelayHours <= 0) errors.Add($"Reminder delay for '{stage.Name}' must be greater than zero.");
+            if (escalation.Enabled && escalation.DelayHours <= 0) errors.Add($"Escalation delay for '{stage.Name}' must be greater than zero.");
+            if (reminder.Enabled && escalation.Enabled && escalation.DelayHours <= reminder.DelayHours) errors.Add($"Escalation for '{stage.Name}' must occur after its reminder.");
+            if (stage.Alerts.Where(x => x.Enabled).Any(x => !x.InApp && !x.Email && !x.Teams)) errors.Add($"Each enabled alert for '{stage.Name}' needs at least one channel.");
+        }
+        return errors.Distinct().ToList();
+    }
+
+    private void AddStage()
+    {
+        if (!IsDraft) return;
+        Route!.Stages.Add(new StageEditor { Sequence = Route.Stages.Count + 1, Name = "New approval stage", Alerts = DefaultAlerts() });
+    }
+
+    private void RemoveStage(Guid clientId)
+    {
+        if (!IsDraft) return;
+        var stage = Route!.Stages.Single(x => x.ClientId == clientId);
+        Route.Stages.Remove(stage); Renumber();
+    }
+
+    private void MoveStage(Guid clientId, int direction)
+    {
+        if (!IsDraft) return;
+        var ordered = Route!.Stages.OrderBy(x => x.Sequence).ToList();
+        var index = ordered.FindIndex(x => x.ClientId == clientId);
+        var target = index + direction;
+        if (index < 0 || target < 0 || target >= ordered.Count) return;
+        (ordered[index], ordered[target]) = (ordered[target], ordered[index]);
+        Route.Stages = ordered; Renumber();
+    }
+
+    private void Renumber() { for (var i = 0; i < Route!.Stages.Count; i++) Route.Stages[i].Sequence = i + 1; }
+    private void SetSimulation(string key, string? value) => SimulationValues[key] = value ?? "";
+    private string GetSimulationValue(string key) => SimulationValues.GetValueOrDefault(key, "");
+
+    private bool IsIncluded(StageEditor stage)
+    {
+        if (!stage.IsConditional) return true;
+        if (stage.Rules.Count == 0) return false;
+        return stage.Rules.All(rule => Evaluate(rule, SimulationValues.GetValueOrDefault(rule.FieldKey, "")));
+    }
+
+    private static bool Evaluate(RuleEditor rule, string actual)
+    {
+        if (decimal.TryParse(actual, NumberStyles.Number, CultureInfo.InvariantCulture, out var left) && decimal.TryParse(rule.Value, NumberStyles.Number, CultureInfo.InvariantCulture, out var right))
+            return rule.Operator switch { ComparisonOperator.GreaterThan => left > right, ComparisonOperator.GreaterThanOrEqual => left >= right, ComparisonOperator.Equal => left == right, ComparisonOperator.NotEqual => left != right, ComparisonOperator.LessThan => left < right, ComparisonOperator.LessThanOrEqual => left <= right, _ => false };
+        return rule.Operator switch { ComparisonOperator.Equal => string.Equals(actual, rule.Value, StringComparison.OrdinalIgnoreCase), ComparisonOperator.NotEqual => !string.Equals(actual, rule.Value, StringComparison.OrdinalIgnoreCase), ComparisonOperator.Contains => actual.Contains(rule.Value, StringComparison.OrdinalIgnoreCase), _ => false };
+    }
+
+    private async Task<Guid> CurrentUserIdAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return Guid.Parse(state.User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+    }
+
+    private static RouteEditor Map(ApprovalRouteVersion version) => new()
+    {
+        Id = version.Id, Name = version.Name, VersionNumber = version.VersionNumber, Status = version.Status,
+        Stages = version.Stages.OrderBy(x => x.Sequence).Select(stage => new StageEditor
+        {
+            Sequence = stage.Sequence, Name = stage.Name, AssignmentStrategy = stage.AssignmentStrategy,
+            NamedApproverId = stage.NamedApproverId, AssigneeFieldKey = stage.AssigneeFieldKey,
+            IsConditional = stage.IsConditional,
+            Rules = stage.Rules.Select(x => new RuleEditor { FieldKey = x.FieldKey, Operator = x.Operator, Value = x.Value }).ToList(),
+            Alerts = MapAlerts(stage.AlertPolicies)
+        }).ToList()
+    };
+
+    private static List<AlertEditor> MapAlerts(IEnumerable<AlertPolicy> policies)
+    {
+        var result = DefaultAlerts();
+        foreach (var policy in policies)
+        {
+            var editor = result.Single(x => x.EventType == policy.EventType);
+            editor.Enabled = policy.IsEnabled; editor.DelayHours = policy.DelayHours; editor.RecipientStrategy = policy.RecipientStrategy;
+            editor.InApp = policy.InAppEnabled; editor.Email = policy.EmailEnabled; editor.Teams = policy.TeamsEnabled;
+        }
+        return result;
+    }
+
+    private static List<AlertEditor> DefaultAlerts() =>
+    [
+        new() { EventType = AlertEventType.Assignment, Enabled = true, RecipientStrategy = AlertRecipientStrategy.StageApprover, InApp = true, Email = true, Teams = true },
+        new() { EventType = AlertEventType.Reminder, Enabled = true, DelayHours = 48, RecipientStrategy = AlertRecipientStrategy.StageApprover, InApp = true, Email = true, Teams = true },
+        new() { EventType = AlertEventType.Escalation, Enabled = true, DelayHours = 120, RecipientStrategy = AlertRecipientStrategy.ApproverManagerOrAdministrator, InApp = true, Email = true, Teams = true },
+        new() { EventType = AlertEventType.Outcome, Enabled = true, RecipientStrategy = AlertRecipientStrategy.Requester, InApp = true, Email = true }
+    ];
+
+    private static ApprovalRouteStage CloneStage(ApprovalRouteStage source, ApprovalRouteVersion target)
+    {
+        var stage = new ApprovalRouteStage { RouteVersion = target, Sequence = source.Sequence, Name = source.Name, AssignmentStrategy = source.AssignmentStrategy, NamedApproverId = source.NamedApproverId, AssigneeFieldKey = source.AssigneeFieldKey, SignatureRequired = true, IsConditional = source.IsConditional };
+        foreach (var rule in source.Rules) stage.Rules.Add(new RouteRule { Stage = stage, FieldKey = rule.FieldKey, Operator = rule.Operator, Value = rule.Value });
+        foreach (var policy in source.AlertPolicies) stage.AlertPolicies.Add(new AlertPolicy { Stage = stage, EventType = policy.EventType, RecipientStrategy = policy.RecipientStrategy, DelayHours = policy.DelayHours, InAppEnabled = policy.InAppEnabled, EmailEnabled = policy.EmailEnabled, TeamsEnabled = policy.TeamsEnabled, MaxDeliveryAttempts = policy.MaxDeliveryAttempts, IsEnabled = policy.IsEnabled });
+        return stage;
+    }
+
+    private static ApprovalRouteStage ToEntity(StageEditor editor, ApprovalRouteVersion version)
+    {
+        var stage = new ApprovalRouteStage { RouteVersion = version, Sequence = editor.Sequence, Name = editor.Name.Trim(), AssignmentStrategy = editor.AssignmentStrategy, NamedApproverId = editor.AssignmentStrategy == AssignmentStrategy.NamedUser ? editor.NamedApproverId : null, AssigneeFieldKey = editor.AssignmentStrategy == AssignmentStrategy.UserField ? editor.AssigneeFieldKey : null, SignatureRequired = true, IsConditional = editor.IsConditional };
+        if (editor.IsConditional) foreach (var rule in editor.Rules) stage.Rules.Add(new RouteRule { Stage = stage, FieldKey = rule.FieldKey, Operator = rule.Operator, Value = rule.Value.Trim() });
+        foreach (var alert in editor.Alerts) stage.AlertPolicies.Add(new AlertPolicy { Stage = stage, EventType = alert.EventType, RecipientStrategy = alert.RecipientStrategy, DelayHours = alert.DelayHours, InAppEnabled = alert.InApp, EmailEnabled = alert.Email, TeamsEnabled = alert.Teams, MaxDeliveryAttempts = 3, IsEnabled = alert.Enabled });
+        return stage;
+    }
+
+    private string AssignmentLabel(StageEditor stage) => stage.AssignmentStrategy switch
+    {
+        AssignmentStrategy.RequesterManager => "Requester’s confirmed manager",
+        AssignmentStrategy.NamedUser => Approvers.FirstOrDefault(x => x.Id == stage.NamedApproverId)?.FullName ?? "Named user not selected",
+        AssignmentStrategy.UserField => $"Person from {CurrentFields.FirstOrDefault(x => x.Key == stage.AssigneeFieldKey)?.Label ?? "form field"}",
+        _ => "Unknown assignment"
+    };
+    private static string StrategyLabel(AssignmentStrategy value) => value switch { AssignmentStrategy.RequesterManager => "Requester manager", AssignmentStrategy.NamedUser => "Named person", AssignmentStrategy.UserField => "Person from form field", _ => value.ToString() };
+    private static string OperatorLabel(ComparisonOperator value) => value switch { ComparisonOperator.GreaterThan => ">", ComparisonOperator.GreaterThanOrEqual => ">=", ComparisonOperator.Equal => "equals", ComparisonOperator.NotEqual => "does not equal", ComparisonOperator.LessThan => "<", ComparisonOperator.LessThanOrEqual => "<=", ComparisonOperator.Contains => "contains", _ => value.ToString() };
+    private static string AlertSummary(StageEditor stage)
+    {
+        var reminder = stage.Alerts.Single(x => x.EventType == AlertEventType.Reminder);
+        var escalation = stage.Alerts.Single(x => x.EventType == AlertEventType.Escalation);
+        return $"assignment now · reminder {(reminder.Enabled ? $"{reminder.DelayHours}h" : "off")} · escalation {(escalation.Enabled ? $"{escalation.DelayHours}h" : "off")}";
+    }
+
+    private sealed record DocumentTypeSummary(Guid Id, string Name);
+    private sealed class RouteEditor { public Guid Id { get; set; } public string Name { get; set; } = ""; public int VersionNumber { get; set; } public RouteVersionStatus Status { get; set; } public List<StageEditor> Stages { get; set; } = []; }
+    private sealed class StageEditor { public Guid ClientId { get; set; } = Guid.NewGuid(); public int Sequence { get; set; } public string Name { get; set; } = ""; public AssignmentStrategy AssignmentStrategy { get; set; } = AssignmentStrategy.NamedUser; public Guid? NamedApproverId { get; set; } public string? AssigneeFieldKey { get; set; } public bool IsConditional { get; set; } public List<RuleEditor> Rules { get; set; } = []; public List<AlertEditor> Alerts { get; set; } = DefaultAlerts(); }
+    private sealed class RuleEditor { public Guid ClientId { get; set; } = Guid.NewGuid(); public string FieldKey { get; set; } = ""; public ComparisonOperator Operator { get; set; } = ComparisonOperator.Equal; public string Value { get; set; } = ""; }
+    private sealed class AlertEditor { public AlertEventType EventType { get; set; } public bool Enabled { get; set; } = true; public int DelayHours { get; set; } public AlertRecipientStrategy RecipientStrategy { get; set; } public bool InApp { get; set; } public bool Email { get; set; } public bool Teams { get; set; } }
+}

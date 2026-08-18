@@ -1,0 +1,76 @@
+@model RequestFormViewModel
+@{ ViewData["Title"] = "New document request"; }
+<div class="page-heading"><div><p class="eyebrow">Configuration-driven intake</p><h1>@Model.DocumentTypeName</h1><p>@Model.DocumentTypeDescription</p></div></div>
+<form method="post" enctype="multipart/form-data" class="form-layout">
+    <section class="panel form-panel">
+        <h2>Document details</h2>
+        <div asp-validation-summary="ModelOnly" class="validation"></div>
+        <div class="field full">
+            <label asp-for="DocumentTypeId">Document type</label>
+            <select asp-for="DocumentTypeId" asp-items="Model.DocumentTypes" onchange="window.location='/requests/new?documentTypeId='+this.value"></select>
+            <small>Changing this selection loads that document type’s fields and published route.</small>
+        </div>
+        <div class="field full"><label asp-for="Title">Request title</label><input asp-for="Title" placeholder="Give this request a clear name" /><span asp-validation-for="Title"></span></div>
+        <div class="field"><label asp-for="Department"></label><input asp-for="Department" /><span asp-validation-for="Department"></span></div>
+        @for (var i = 0; i < Model.Fields.Count; i++)
+        {
+            var field = Model.Fields[i];
+            <input asp-for="Fields[i].FieldDefinitionId" type="hidden" />
+            <div class="field @(field.FieldType == DocumentFieldType.LongText ? "full" : "")">
+                <label asp-for="Fields[i].Value">@field.Label @if (field.IsRequired){<span class="required">*</span>}</label>
+                @switch (field.FieldType)
+                {
+                    case DocumentFieldType.LongText:
+                        <textarea asp-for="Fields[i].Value" rows="5"></textarea>
+                        break;
+                    case DocumentFieldType.Choice:
+                        <select asp-for="Fields[i].Value"><option value="">Select an option</option>@foreach (var option in field.Options){<option value="@option">@option</option>}</select>
+                        break;
+                    case DocumentFieldType.Currency:
+                        <input asp-for="Fields[i].Value" type="number" step="0.01" min="0" />
+                        break;
+                    case DocumentFieldType.Date:
+                        <input asp-for="Fields[i].Value" type="date" />
+                        break;
+                    case DocumentFieldType.Url:
+                        <input asp-for="Fields[i].Value" type="url" placeholder="https://" />
+                        break;
+                    case DocumentFieldType.Boolean:
+                        <select asp-for="Fields[i].Value"><option value="">Select</option><option value="true">Yes</option><option value="false">No</option></select>
+                        break;
+                    case DocumentFieldType.User:
+                        <select asp-for="Fields[i].Value" asp-items="Model.Users"><option value="">Select a person</option></select>
+                        break;
+                    default:
+                        <input asp-for="Fields[i].Value" />
+                        break;
+                }
+                @if (!string.IsNullOrWhiteSpace(field.HelpText)){<small>@field.HelpText</small>}
+                <span asp-validation-for="Fields[i].Value"></span>
+            </div>
+        }
+    </section>
+    <aside>
+        <section class="panel form-panel">
+            <h2>Manager confirmation</h2>
+            <p class="help">Microsoft Entra supplies the manager in production. The requester may correct or confirm the selection.</p>
+            <label asp-for="ManagerId">Manager</label><select asp-for="ManagerId" asp-items="Model.Managers"><option value="">Select manager</option></select><span asp-validation-for="ManagerId"></span>
+            <label class="check"><input asp-for="ManagerConfirmed" /> I confirm this manager is correct.</label><span asp-validation-for="ManagerConfirmed"></span>
+        </section>
+        <section class="panel form-panel">
+            <h2>Supporting documents</h2>
+            <p class="help">Required for every request. PDF, Office, image, or text; up to 25 MB each.</p>
+            <input asp-for="SupportingDocuments" type="file" multiple /><span asp-validation-for="SupportingDocuments"></span>
+        </section>
+        <section class="route-preview">
+            <strong>Published route preview</strong>
+            <ol>
+            @foreach (var stage in Model.RoutePreview)
+            {
+                <li><strong>@stage.Name</strong><small>@stage.Assignment</small>@if (!string.IsNullOrWhiteSpace(stage.Condition)){<small>When: @stage.Condition</small>}<small>Alerts: @stage.Alerts</small></li>
+            }
+            </ol>
+        </section>
+        <button class="button primary full-button" type="submit">Submit for approval</button>
+    </aside>
+</form>

@@ -1,0 +1,25 @@
+@model IReadOnlyList<ApplicationUser>
+@{
+    ViewData["Title"] = "Demo sign in";
+}
+<section class="login-shell">
+    <div>
+        <p class="eyebrow">Document approval demonstration</p>
+        <h1>Choose a demo identity</h1>
+        <p class="lede">Each identity represents a future Microsoft Entra-authenticated user. Select roles in order to walk through the routing process.</p>
+        <div class="notice"><strong>Development only.</strong> This passwordless selector is disabled outside the Development environment.</div>
+    </div>
+    <div class="identity-grid">
+        @foreach (var user in Model)
+        {
+            <form method="post" class="identity-card">
+                <input type="hidden" name="userId" value="@user.Id" />
+                <input type="hidden" name="returnUrl" value="@ViewBag.ReturnUrl" />
+                <div class="avatar">@string.Concat(user.FullName.Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(x => x[0]))</div>
+                <div><strong>@user.FullName</strong><small>@user.Email</small><small>@user.RolesCsv</small></div>
+                <button type="submit">Continue</button>
+            </form>
+        }
+    </div>
+</section>
+

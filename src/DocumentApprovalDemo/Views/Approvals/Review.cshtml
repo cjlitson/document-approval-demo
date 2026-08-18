@@ -1,0 +1,26 @@
+@model ApprovalInstance
+@{ ViewData["Title"] = "Review approval"; var decision = (ApprovalDecisionViewModel)ViewBag.Decision; var fields = Model.Request.FieldValues.Where(x => x.RevisionNumber == Model.RevisionNumber).OrderBy(x => x.Sequence).ToList(); }
+<div class="page-heading"><div><p class="eyebrow">@Model.Request.DocumentType.Name · @Model.StageName · @Model.Request.RequestNumber</p><h1>@Model.Request.Title</h1><p>Submitted by @Model.Request.Requester.FullName</p></div><span class="status pending">Signature required</span></div>
+<div class="detail-grid">
+    <div>
+        <section class="panel detail-list"><h2>Request summary</h2><dl><div><dt>Document type</dt><dd>@Model.Request.DocumentType.Name</dd></div><div><dt>Department</dt><dd>@Model.Request.Department</dd></div><div><dt>Revision</dt><dd>@Model.RevisionNumber</dd></div>
+        @foreach (var field in fields)
+        {
+            <div><dt>@field.Label</dt><dd>@if (field.FieldType == DocumentFieldType.Url && !string.IsNullOrWhiteSpace(field.Value)){<a href="@field.Value" rel="noreferrer" target="_blank">Open link ↗</a>}else if (field.FieldType == DocumentFieldType.Currency && decimal.TryParse(field.Value, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var amount)){@amount.ToString("C")}else{<span class="preserve">@(field.DisplayValue ?? field.Value)</span>}</dd></div>
+        }
+        </dl></section>
+        <section class="panel"><h2>Supporting documents</h2><ul class="file-list">@foreach (var file in Model.Request.Attachments.Where(x => x.RevisionNumber == Model.RevisionNumber)){<li><div><strong>@file.OriginalFileName</strong><small>@((file.SizeBytes / 1024d).ToString("N1")) KB</small></div><a asp-controller="Requests" asp-action="Attachment" asp-route-requestId="@Model.RequestId" asp-route-attachmentId="@file.Id">Download</a></li>}</ul></section>
+    </div>
+    <aside>
+        <form method="post" class="panel signature-panel">
+            <input type="hidden" name="ApprovalId" value="@Model.Id" />
+            <h2>Record your decision</h2>
+            <div asp-validation-summary="All" class="validation"></div>
+            <p class="help">Your authenticated Windows/Entra identity is authoritative. Type your full name to adopt a signature for this stage.</p>
+            <label for="TypedSignature">Type “@Model.Approver.FullName”</label><input id="TypedSignature" name="TypedSignature" value="@decision.TypedSignature" autocomplete="off" required />
+            <label for="Comments">Comments <small>(required for rejection)</small></label><textarea id="Comments" name="Comments" rows="5">@decision.Comments</textarea>
+            <div class="decision-grid"><button class="button danger" type="submit" name="Decision" value="Reject">Reject</button><button class="button primary" type="submit" name="Decision" value="Approve">Approve and sign</button></div>
+            <small>Signing records identity, typed name, decision, stage, route version, revision, and UTC timestamp. Alerts never approve on your behalf.</small>
+        </form>
+    </aside>
+</div>

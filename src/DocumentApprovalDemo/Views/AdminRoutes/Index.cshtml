@@ -1,0 +1,12 @@
+@model IReadOnlyList<ApprovalRouteVersion>
+@{ ViewData["Title"] = "Route administration"; }
+<div class="page-heading"><div><p class="eyebrow">Central system administration</p><h1>Approval route versions</h1><p>Each document type owns an immutable, versioned route and its alert policies.</p></div><a class="button primary" href="/route-designer">Open visual route designer</a></div>
+<section class="panel">
+<table><thead><tr><th>Document type</th><th>Version</th><th>Name</th><th>Status</th><th>Stages</th><th>Alert policies</th><th>Published</th></tr></thead><tbody>
+@foreach (var version in Model)
+{
+    <tr><td><strong>@version.Route.DocumentType.Name</strong></td><td>v@version.VersionNumber</td><td>@version.Name</td><td><span class="status @version.Status.ToString().ToLowerInvariant()">@version.Status</span></td><td>@version.Stages.Count</td><td>@version.Stages.Sum(x => x.AlertPolicies.Count)</td><td>@version.PublishedAtUtc?.ToLocalTime().ToString("g")</td></tr>
+}
+</tbody></table>
+</section>
+<section class="notice"><strong>Evidence rule:</strong> a request retains the route version used when submitted. Drafting or publishing another version never rewrites in-flight approval evidence.</section>
