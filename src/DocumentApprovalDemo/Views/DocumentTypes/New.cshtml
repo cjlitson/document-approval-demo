@@ -1,0 +1,101 @@
+@model CreateDocumentTypeViewModel
+@{
+    ViewData["Title"] = "New Document Type";
+}
+
+<div class="page-heading">
+    <div><p class="eyebrow">Guided configuration</p><h1>New Document Type</h1><p>Build a safe intake definition and an editable workflow draft.</p></div>
+    <a class="button" asp-action="Index">Cancel</a>
+</div>
+
+<form method="post" class="wizard-layout" data-wizard>
+    <nav class="wizard-steps" aria-label="Creation progress">
+        @foreach (var item in new[] { ("Details", "Name and identity"), ("Form Fields", "Initial intake"), ("Access", "Scoped oversight"), ("Notifications", "Lifecycle events"), ("Workflow", "Draft route"), ("Review", "Confirm and create") }.Select((value, index) => (value, index)))
+        {
+            <button type="button" data-wizard-nav="@item.index" aria-current="@(item.index == 0 ? "step" : null)"><span>@(item.index + 1)</span><strong>@item.value.Item1</strong><small>@item.value.Item2</small></button>
+        }
+    </nav>
+
+    <div class="wizard-content">
+        <div asp-validation-summary="ModelOnly" class="validation"></div>
+
+        <section class="panel form-panel wizard-panel" data-wizard-step="0">
+            <div class="panel-heading"><div><h2>Details</h2><p>Choose stable identifiers before configuring behavior.</p></div></div>
+            <div class="form-grid">
+                <div class="field"><label asp-for="Name"></label><input asp-for="Name" placeholder="Purchase Request" /><span asp-validation-for="Name"></span></div>
+                <div class="field"><label asp-for="Key">Key</label><input asp-for="Key" placeholder="purchase-request" /><small>Lowercase letters, numbers, and hyphens.</small><span asp-validation-for="Key"></span></div>
+                <div class="field"><label asp-for="NumberPrefix">Number prefix</label><input asp-for="NumberPrefix" maxlength="8" /><small>Used in request numbers, for example PUR-2026-0001.</small><span asp-validation-for="NumberPrefix"></span></div>
+                <div class="field full"><label asp-for="Description"></label><textarea asp-for="Description" rows="4"></textarea><span asp-validation-for="Description"></span></div>
+            </div>
+        </section>
+
+        <section class="panel form-panel wizard-panel" data-wizard-step="1" hidden>
+            <div class="panel-heading"><div><h2>Form Fields</h2><p>Configure initial intake fields. You can add or change unused fields later.</p></div><button class="button small" type="button" data-add-row="field-rows">+ Add field</button></div>
+            <div id="field-rows" class="configuration-rows" data-row-kind="field">
+                @for (var i = 0; i < Model.Fields.Count; i++)
+                {
+                    <div class="configuration-row" data-collection-row>
+                        <div class="field"><label>Label</label><input asp-for="Fields[i].Label" /></div>
+                        <div class="field"><label>Key</label><input asp-for="Fields[i].Key" /></div>
+                        <div class="field"><label>Type</label><select asp-for="Fields[i].FieldType" asp-items="Html.GetEnumSelectList<DocumentFieldType>()"></select></div>
+                        <div class="field"><label>Choices</label><input asp-for="Fields[i].OptionsCsv" placeholder="Option one, Option two" /></div>
+                        <div class="field full"><label>Help text</label><input asp-for="Fields[i].HelpText" /></div>
+                        <label class="check"><input asp-for="Fields[i].IsRequired" /> Required</label>
+                        <button class="button small danger" type="button" data-remove-row>Remove</button>
+                    </div>
+                }
+            </div>
+        </section>
+
+        <section class="panel form-panel wizard-panel" data-wizard-step="2" hidden>
+            <div class="panel-heading"><div><h2>Access</h2><p>Assign operational visibility without granting global administration.</p></div><button class="button small" type="button" data-add-row="access-rows">+ Add person</button></div>
+            <div id="access-rows" class="configuration-rows" data-row-kind="access">
+                @for (var i = 0; i < Model.Access.Count; i++)
+                {
+                    <div class="configuration-row compact" data-collection-row>
+                        <div class="field"><label>Person</label><select asp-for="Access[i].UserId" asp-items="Model.Users"><option value="">Select a person</option></select></div>
+                        <div class="field"><label>Role</label><select asp-for="Access[i].AccessRole" asp-items="Html.GetEnumSelectList<DocumentTypeAccessRole>()"></select></div>
+                        <button class="button small danger" type="button" data-remove-row>Remove</button>
+                    </div>
+                }
+            </div>
+            <div class="notice"><strong>Governance:</strong> Scoped administrators, coordinators, and viewers can oversee requests. Only a SystemAdmin can change access or publish workflows.</div>
+        </section>
+
+        <section class="panel form-panel wizard-panel" data-wizard-step="3" hidden>
+            <div class="panel-heading"><div><h2>Notifications</h2><p>Send lifecycle alerts without creating approvals or signatures.</p></div><button class="button small" type="button" data-add-row="notification-rows">+ Add rule</button></div>
+            <div id="notification-rows" class="configuration-rows" data-row-kind="notification">
+                @for (var i = 0; i < Model.Notifications.Count; i++)
+                {
+                    <div class="configuration-row" data-collection-row>
+                        <div class="field"><label>Event</label><select asp-for="Notifications[i].EventType" asp-items="Html.GetEnumSelectList<LifecycleNotificationEvent>()"></select></div>
+                        <div class="field"><label>Recipients</label><select asp-for="Notifications[i].RecipientType" asp-items="Html.GetEnumSelectList<LifecycleNotificationRecipient>()"></select></div>
+                        <div class="field"><label>Named user (when applicable)</label><select asp-for="Notifications[i].NamedUserId" asp-items="Model.Users"><option value="">Not applicable</option></select></div>
+                        <div class="field"><label>User field key (when applicable)</label><input asp-for="Notifications[i].UserFieldKey" /></div>
+                        <div class="channel-checks"><label><input asp-for="Notifications[i].SendInApp" /> In app</label><label><input asp-for="Notifications[i].SendEmail" /> Email</label><label><input asp-for="Notifications[i].SendTeams" /> Teams</label></div>
+                        <button class="button small danger" type="button" data-remove-row>Remove</button>
+                    </div>
+                }
+            </div>
+        </section>
+
+        <section class="panel form-panel wizard-panel" data-wizard-step="4" hidden>
+            <div class="panel-heading"><div><h2>Workflow</h2><p>An editable version 1 draft will be created automatically.</p></div></div>
+            <div class="workflow-placeholder"><span class="node-number">1</span><div><strong>Initial workflow draft</strong><p>Add approvers, conditions, signatures, and approval-stage alerts in the existing Route Designer after creation.</p></div></div>
+        </section>
+
+        <section class="panel form-panel wizard-panel" data-wizard-step="5" hidden>
+            <div class="panel-heading"><div><h2>Review</h2><p>Confirm the configuration. No existing document type will be affected.</p></div></div>
+            <dl class="review-summary">
+                <div><dt>Document type</dt><dd data-review-name>Enter details in step 1</dd></div>
+                <div><dt>Fields</dt><dd data-review-count="field-rows">0 configured</dd></div>
+                <div><dt>Access</dt><dd data-review-count="access-rows">0 assignments</dd></div>
+                <div><dt>Notifications</dt><dd data-review-count="notification-rows">0 rules</dd></div>
+                <div><dt>Workflow</dt><dd>Version 1 editable draft</dd></div>
+            </dl>
+            <button class="button primary" type="submit">Create Document Type</button>
+        </section>
+
+        <div class="wizard-actions"><button class="button" type="button" data-wizard-previous hidden>Back</button><button class="button primary" type="button" data-wizard-next>Continue</button></div>
+    </div>
+</form>

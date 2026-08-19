@@ -1,0 +1,13 @@
+@model WorkflowProgressViewModel
+<section class="panel workflow-progress">
+    <div class="panel-heading"><div><h2>Workflow progress</h2><p>Completed, current, future, and conditionally skipped steps.</p></div></div>
+    <ol class="workflow-stepper">
+    @foreach (var item in Model.Items)
+    {
+        <li class="@item.State">
+            <span class="step-marker" aria-hidden="true">@(item.State == "completed" ? "✓" : item.State == "current" ? "●" : item.State == "skipped" ? "—" : item.State == "rejected" ? "!" : "○")</span>
+            <div><strong>@item.Title</strong><p>@item.Description</p>@if(item.TimestampUtc.HasValue){<small>@item.TimestampUtc.Value.ToLocalTime().ToString("MMM d, yyyy 'at' h:mm tt")</small>}</div>
+        </li>
+    }
+    </ol>
+</section>

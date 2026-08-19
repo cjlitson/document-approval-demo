@@ -50,10 +50,15 @@ builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<IRoutingService, RoutingService>();
 builder.Services.AddScoped<IWorkflowService, WorkflowService>();
 builder.Services.AddScoped<IFileStorageService, LocalFileStorageService>();
+builder.Services.AddScoped<IFilePreviewService, FilePreviewService>();
+builder.Services.AddScoped<IDocumentAuthorizationService, DocumentAuthorizationService>();
+builder.Services.AddScoped<IDocumentTypeAdministrationService, DocumentTypeAdministrationService>();
 builder.Services.AddScoped<INotificationService, OutboxNotificationService>();
+builder.Services.AddScoped<ILifecycleNotificationService, LifecycleNotificationService>();
 builder.Services.AddScoped<INotificationDispatcher, SimulatedNotificationDispatcher>();
 builder.Services.AddHostedService<NotificationDispatcherWorker>();
-builder.Services.AddScoped<ISignedPackageService, SignedPackageService>();
+builder.Services.AddScoped<IApprovalRecordService, ApprovalRecordService>();
+builder.Services.AddScoped<IDocumentPackageService, DocumentPackageService>();
 
 var app = builder.Build();
 

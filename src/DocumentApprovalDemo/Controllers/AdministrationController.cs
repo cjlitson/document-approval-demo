@@ -20,14 +20,4 @@ public sealed class AdministrationController(AppDbContext db) : Controller
         return View(requests.OrderByDescending(x => x.CreatedAtUtc).ToList());
     }
 
-    [HttpGet("document-types")]
-    public async Task<IActionResult> DocumentTypes(CancellationToken cancellationToken)
-    {
-        var documentTypes = await db.DocumentTypes.AsNoTracking()
-            .Include(x => x.Fields)
-            .Include(x => x.Routes).ThenInclude(x => x.Versions)
-            .OrderBy(x => x.Name)
-            .ToListAsync(cancellationToken);
-        return View(documentTypes);
-    }
 }

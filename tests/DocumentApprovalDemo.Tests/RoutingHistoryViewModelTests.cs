@@ -68,4 +68,43 @@ public sealed class RoutingHistoryViewModelTests
         Assert.Equal("Workflow completed", result.Items[4].Title);
         Assert.Equal("Pending", result.Items[4].StatusLabel);
     }
+
+    [Fact]
+    public void WorkflowProgress_DistinguishesCompletedCurrentSkippedAndFuture()
+    {
+        var route = new ApprovalRouteVersion { Name = "Test route", VersionNumber = 1 };
+        var first = new ApprovalRouteStage { RouteVersion = route, Sequence = 1, Name = "Manager", StageKey = "manager" };
+        var skipped = new ApprovalRouteStage { RouteVersion = route, Sequence = 2, Name = "Executive", StageKey = "executive", IsConditional = true };
+        var future = new ApprovalRouteStage { RouteVersion = route, Sequence = 3, Name = "Finance", StageKey = "finance" };
+        route.Stages.Add(first);
+        route.Stages.Add(skipped);
+        route.Stages.Add(future);
+        var manager = new ApplicationUser { FullName = "Morgan Manager" };
+        var finance = new ApplicationUser { FullName = "Finley Finance" };
+        var request = new ApprovalRequest
+        {
+            Requester = new ApplicationUser { FullName = "Avery Employee" },
+            RouteVersion = route,
+            CurrentRevisionNumber = 1,
+            Status = RequestStatus.InApproval,
+            SubmittedAtUtc = DateTimeOffset.UtcNow.AddHours(-2)
+        };
+        request.Approvals.Add(new ApprovalInstance
+        {
+            RouteStageId = first.Id, RevisionNumber = 1, Sequence = 1, StageName = first.Name,
+            Approver = manager, Status = ApprovalStatus.Approved
+        });
+        request.Approvals.Add(new ApprovalInstance
+        {
+            RouteStageId = future.Id, RevisionNumber = 1, Sequence = 3, StageName = future.Name,
+            Approver = finance, Status = ApprovalStatus.Pending
+        });
+
+        var result = WorkflowProgressViewModel.Create(request);
+
+        Assert.Equal("completed", result.Items.Single(x => x.Title == "Manager").State);
+        Assert.Equal("skipped", result.Items.Single(x => x.Title == "Executive").State);
+        Assert.Equal("current", result.Items.Single(x => x.Title == "Finance").State);
+        Assert.Equal("future", result.Items.Single(x => x.Title == "Completed").State);
+    }
 }

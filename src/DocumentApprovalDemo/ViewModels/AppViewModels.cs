@@ -14,6 +14,7 @@ public sealed class DashboardViewModel
     public IReadOnlyList<DashboardApprovalQueueItemViewModel> ApprovalQueue { get; init; } = [];
     public IReadOnlyList<DashboardRequestViewModel> RecentRequests { get; init; } = [];
     public IReadOnlyList<DashboardActivityItemViewModel> RecentActivity { get; init; } = [];
+    public IReadOnlyList<ManagedDocumentTypeSummaryViewModel> ManagedDocumentTypes { get; init; } = [];
 }
 
 public sealed class DashboardApprovalQueueItemViewModel
@@ -120,6 +121,123 @@ public sealed class RequestDetailsViewModel
 {
     public required ApprovalRequest Request { get; init; }
     public required RoutingHistoryViewModel RoutingHistory { get; init; }
+    public required WorkflowProgressViewModel WorkflowProgress { get; init; }
+    public IReadOnlyList<RequestDocumentViewModel> Documents { get; init; } = [];
+    public IReadOnlyList<RequestActivityViewModel> Activity { get; init; } = [];
+    public bool PackageAvailable { get; init; }
+}
+
+public sealed class WorkflowProgressViewModel
+{
+    public IReadOnlyList<WorkflowProgressItemViewModel> Items { get; init; } = [];
+
+    public static WorkflowProgressViewModel Create(ApprovalRequest request)
+    {
+        var approvals = request.Approvals
+            .Where(x => x.RevisionNumber == request.CurrentRevisionNumber)
+            .ToDictionary(x => x.RouteStageId);
+        var items = new List<WorkflowProgressItemViewModel>
+        {
+            new()
+            {
+                Title = "Submitted",
+                Description = request.SubmittedAtUtc.HasValue ? $"Submitted by {request.Requester.FullName}" : "Request draft",
+                State = request.SubmittedAtUtc.HasValue ? "completed" : "current",
+                TimestampUtc = request.SubmittedAtUtc
+            }
+        };
+
+        var stages = request.RouteVersion?.Stages.OrderBy(x => x.Sequence).ToList() ?? [];
+        if (stages.Count == 0)
+        {
+            stages = request.Approvals.Where(x => x.RevisionNumber == request.CurrentRevisionNumber)
+                .OrderBy(x => x.Sequence)
+                .Select(x => new ApprovalRouteStage { Id = x.RouteStageId, Sequence = x.Sequence, Name = x.StageName })
+                .ToList();
+        }
+
+        foreach (var stage in stages)
+        {
+            approvals.TryGetValue(stage.Id, out var approval);
+            items.Add(new WorkflowProgressItemViewModel
+            {
+                Title = stage.Name,
+                Description = approval is null
+                    ? stage.IsConditional ? "Not required for the submitted values" : "Not executed"
+                    : approval.Status switch
+                    {
+                        ApprovalStatus.Approved => $"Approved by {approval.Approver.FullName}",
+                        ApprovalStatus.Rejected => $"Rejected by {approval.Approver.FullName}",
+                        ApprovalStatus.Pending => $"Awaiting {approval.Approver.FullName}",
+                        ApprovalStatus.Queued => $"Upcoming · assigned to {approval.Approver.FullName}",
+                        ApprovalStatus.Superseded => "Superseded by a later revision",
+                        ApprovalStatus.Skipped => "Not required",
+                        _ => approval.Status.ToString()
+                    },
+                State = approval?.Status switch
+                {
+                    ApprovalStatus.Approved => "completed",
+                    ApprovalStatus.Pending => "current",
+                    ApprovalStatus.Rejected => "rejected",
+                    ApprovalStatus.Skipped => "skipped",
+                    ApprovalStatus.Superseded => "skipped",
+                    ApprovalStatus.Queued => "future",
+                    null => "skipped",
+                    _ => "future"
+                },
+                TimestampUtc = approval?.CompletedAtUtc ?? approval?.ActivatedAtUtc
+            });
+        }
+
+        items.Add(new WorkflowProgressItemViewModel
+        {
+            Title = "Completed",
+            Description = request.Status switch
+            {
+                RequestStatus.Approved => "All required approvals completed",
+                RequestStatus.Rejected => "Paused for requester revision",
+                _ => "Completes after all required stages"
+            },
+            State = request.Status switch
+            {
+                RequestStatus.Approved => "completed",
+                RequestStatus.Rejected => "rejected",
+                _ => "future"
+            },
+            TimestampUtc = request.CompletedAtUtc
+        });
+        return new WorkflowProgressViewModel { Items = items };
+    }
+}
+
+public sealed class WorkflowProgressItemViewModel
+{
+    public string Title { get; init; } = "";
+    public string Description { get; init; } = "";
+    public string State { get; init; } = "future";
+    public DateTimeOffset? TimestampUtc { get; init; }
+}
+
+public sealed class RequestDocumentViewModel
+{
+    public Guid? AttachmentId { get; init; }
+    public string Name { get; init; } = "";
+    public string TypeLabel { get; init; } = "";
+    public int? Revision { get; init; }
+    public long? SizeBytes { get; init; }
+    public bool IsApprovalRecord { get; init; }
+    public bool CanPreview { get; init; }
+    public string? PreviewUnavailableReason { get; init; }
+    public string PreviewUrl { get; init; } = "";
+    public string DownloadUrl { get; init; } = "";
+}
+
+public sealed class RequestActivityViewModel
+{
+    public string EventType { get; init; } = "";
+    public string Details { get; init; } = "";
+    public string ActorName { get; init; } = "";
+    public DateTimeOffset OccurredAtUtc { get; init; }
 }
 
 public sealed class RoutingHistoryViewModel

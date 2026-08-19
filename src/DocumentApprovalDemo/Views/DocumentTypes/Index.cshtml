@@ -1,0 +1,71 @@
+@model DocumentTypeAdministrationIndexViewModel
+@{
+    ViewData["Title"] = "Document Types";
+}
+
+<div class="page-heading">
+    <div>
+        <p class="eyebrow">System administration</p>
+        <h1>Document Types</h1>
+        <p>Configure intake, access, notifications, and routing.</p>
+    </div>
+    <a class="button primary" asp-action="New">+ New Document Type</a>
+</div>
+
+<section class="panel data-workspace">
+    <form method="get" class="table-toolbar" role="search">
+        <label class="search-field">
+            <span class="visually-hidden">Search document types</span>
+            <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="6" /><path d="m14 14 4 4" /></svg>
+            <input type="search" name="search" value="@Model.Search" placeholder="Search document types" />
+        </label>
+        <label>
+            <span class="visually-hidden">Status</span>
+            <select name="status" onchange="this.form.submit()">
+                <option value="active" selected="@(Model.Status == "active")">Active</option>
+                <option value="inactive" selected="@(Model.Status == "inactive")">Inactive</option>
+                <option value="all" selected="@(Model.Status == "all")">All statuses</option>
+            </select>
+        </label>
+        <button class="button" type="submit">Search</button>
+    </form>
+
+    @if (Model.Items.Count == 0)
+    {
+        <div class="empty-state">
+            <h2>No document types found</h2>
+            <p>Adjust the search or status filter, or create a new document type.</p>
+        </div>
+    }
+    else
+    {
+        <div class="table-scroll">
+            <table class="data-table document-type-table">
+                <thead><tr><th>Document type</th><th>Administrators</th><th>Workflow</th><th>Active requests</th><th>Status</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+                <tbody>
+                @foreach (var item in Model.Items)
+                {
+                    <tr>
+                        <td><strong>@item.Name</strong><small>@item.Key · @item.Description</small></td>
+                        <td>@item.Administrators</td>
+                        <td>@item.WorkflowStatus @if (item.WorkflowVersion.HasValue){<small>Version @item.WorkflowVersion</small>}</td>
+                        <td>@item.ActiveRequests</td>
+                        <td><span class="status @(item.IsActive ? "active" : "inactive")">@(item.IsActive ? "Active" : "Inactive")</span></td>
+                        <td class="table-actions">
+                            <a class="button small" asp-action="Manage" asp-route-id="@item.Id">Manage</a>
+                            @if (item.IsActive)
+                            {
+                                <form asp-action="Deactivate" asp-route-id="@item.Id" method="post"><button class="button small" type="submit">Deactivate</button></form>
+                            }
+                            else
+                            {
+                                <form asp-action="Reactivate" asp-route-id="@item.Id" method="post"><button class="button small" type="submit">Reactivate</button></form>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>

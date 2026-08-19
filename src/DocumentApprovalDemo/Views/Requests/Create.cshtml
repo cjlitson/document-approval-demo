@@ -60,7 +60,16 @@
         <section class="panel form-panel">
             <h2>Supporting documents</h2>
             <p class="help">Required for every request. PDF, Office, image, or text; up to 25 MB each.</p>
-            <input asp-for="SupportingDocuments" type="file" multiple /><span asp-validation-for="SupportingDocuments"></span>
+            <div class="upload-workspace" data-file-upload>
+                <label class="upload-dropzone">
+                    <span class="upload-icon" aria-hidden="true">↑</span>
+                    <strong>Drop supporting documents here</strong>
+                    <small>or browse from your device</small>
+                    <input asp-for="SupportingDocuments" type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.txt" data-file-input />
+                </label>
+                <div class="upload-table" data-file-list hidden></div>
+            </div>
+            <span asp-validation-for="SupportingDocuments"></span>
         </section>
         <section class="route-preview">
             <strong>Published route preview</strong>

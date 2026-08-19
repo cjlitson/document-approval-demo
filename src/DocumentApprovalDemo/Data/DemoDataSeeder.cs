@@ -10,6 +10,8 @@ public static class DemoDataSeeder
     public static readonly Guid PresidentId = Guid.Parse("10000000-0000-0000-0000-000000000003");
     public static readonly Guid FinanceId = Guid.Parse("10000000-0000-0000-0000-000000000004");
     public static readonly Guid AdminId = Guid.Parse("10000000-0000-0000-0000-000000000005");
+    public static readonly Guid PurchasingId = Guid.Parse("10000000-0000-0000-0000-000000000006");
+    public static readonly Guid CoordinatorId = Guid.Parse("10000000-0000-0000-0000-000000000007");
     public static readonly Guid PurchaseDocumentTypeId = Guid.Parse("20000000-0000-0000-0000-000000000001");
     public static readonly Guid PolicyDocumentTypeId = Guid.Parse("20000000-0000-0000-0000-000000000002");
 
@@ -45,7 +47,17 @@ public static class DemoDataSeeder
             Id = EmployeeId, FullName = "Avery Employee", Email = "avery.employee@example.org",
             Department = "Operations", RolesCsv = Roles.Requester, ManagerId = ManagerId, EntraObjectId = "demo-employee"
         };
-        db.Users.AddRange(manager, president, finance, admin, employee);
+        var purchasing = new ApplicationUser
+        {
+            Id = PurchasingId, FullName = "Taylor Purchasing", Email = "taylor.purchasing@example.org",
+            Department = "Purchasing", RolesCsv = Roles.Requester, ManagerId = PresidentId, EntraObjectId = "demo-purchasing"
+        };
+        var coordinator = new ApplicationUser
+        {
+            Id = CoordinatorId, FullName = "Jordan Smith", Email = "jordan.smith@example.org",
+            Department = "Purchasing", RolesCsv = Roles.Requester, ManagerId = PurchasingId, EntraObjectId = "demo-coordinator"
+        };
+        db.Users.AddRange(manager, president, finance, admin, employee, purchasing, coordinator);
 
         var purchase = new DocumentType
         {
@@ -74,6 +86,30 @@ public static class DemoDataSeeder
             Stage = executiveStage, FieldKey = "amount", Operator = ComparisonOperator.GreaterThan, Value = "1000"
         });
         Stage(purchaseVersion, 3, "Financial Control Review", AssignmentStrategy.NamedUser, FinanceId);
+        purchase.AccessAssignments.Add(new DocumentTypeAccess
+        {
+            DocumentType = purchase,
+            User = purchasing,
+            AccessRole = DocumentTypeAccessRole.Administrator,
+            CreatedByUserId = AdminId
+        });
+        purchase.AccessAssignments.Add(new DocumentTypeAccess
+        {
+            DocumentType = purchase,
+            User = coordinator,
+            AccessRole = DocumentTypeAccessRole.Coordinator,
+            CreatedByUserId = AdminId
+        });
+        purchase.LifecycleNotificationRules.Add(new LifecycleNotificationRule
+        {
+            DocumentType = purchase,
+            EventType = LifecycleNotificationEvent.RequestCompleted,
+            RecipientType = LifecycleNotificationRecipient.DocumentTypeAdministrators,
+            SendInApp = true,
+            IsEnabled = true,
+            CreatedByUserId = AdminId,
+            UpdatedByUserId = AdminId
+        });
 
         var policy = new DocumentType
         {
@@ -154,6 +190,7 @@ public static class DemoDataSeeder
         {
             RouteVersion = version,
             Sequence = sequence,
+            StageKey = $"stage-{sequence:00}",
             Name = name,
             AssignmentStrategy = strategy,
             NamedApproverId = namedApproverId,

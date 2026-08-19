@@ -143,6 +143,9 @@ else
 }
 
 @code {
+    [SupplyParameterFromQuery(Name = "documentTypeId")]
+    public Guid? RequestedDocumentTypeId { get; set; }
+
     private List<DocumentTypeSummary> DocumentTypes { get; set; } = [];
     private List<ApplicationUser> Approvers { get; set; } = [];
     private List<DocumentFieldDefinition> CurrentFields { get; set; } = [];
@@ -164,7 +167,10 @@ else
         Approvers = await db.Users.AsNoTracking().Where(x => x.IsActive && x.RolesCsv.Contains(Roles.Approver)).OrderBy(x => x.FullName).ToListAsync();
         if (DocumentTypes.Count > 0)
         {
-            SelectedDocumentTypeId = DocumentTypes[0].Id;
+            SelectedDocumentTypeId = RequestedDocumentTypeId.HasValue &&
+                                     DocumentTypes.Any(x => x.Id == RequestedDocumentTypeId.Value)
+                ? RequestedDocumentTypeId.Value
+                : DocumentTypes[0].Id;
             await LoadRouteAsync();
         }
     }
@@ -337,7 +343,7 @@ else
         Id = version.Id, Name = version.Name, VersionNumber = version.VersionNumber, Status = version.Status,
         Stages = version.Stages.OrderBy(x => x.Sequence).Select(stage => new StageEditor
         {
-            Sequence = stage.Sequence, Name = stage.Name, AssignmentStrategy = stage.AssignmentStrategy,
+            StageKey = stage.StageKey, Sequence = stage.Sequence, Name = stage.Name, AssignmentStrategy = stage.AssignmentStrategy,
             NamedApproverId = stage.NamedApproverId, AssigneeFieldKey = stage.AssigneeFieldKey,
             IsConditional = stage.IsConditional,
             Rules = stage.Rules.Select(x => new RuleEditor { FieldKey = x.FieldKey, Operator = x.Operator, Value = x.Value }).ToList(),
@@ -367,7 +373,7 @@ else
 
     private static ApprovalRouteStage CloneStage(ApprovalRouteStage source, ApprovalRouteVersion target)
     {
-        var stage = new ApprovalRouteStage { RouteVersion = target, Sequence = source.Sequence, Name = source.Name, AssignmentStrategy = source.AssignmentStrategy, NamedApproverId = source.NamedApproverId, AssigneeFieldKey = source.AssigneeFieldKey, SignatureRequired = true, IsConditional = source.IsConditional };
+        var stage = new ApprovalRouteStage { RouteVersion = target, StageKey = source.StageKey, Sequence = source.Sequence, Name = source.Name, AssignmentStrategy = source.AssignmentStrategy, NamedApproverId = source.NamedApproverId, AssigneeFieldKey = source.AssigneeFieldKey, SignatureRequired = true, IsConditional = source.IsConditional };
         foreach (var rule in source.Rules) stage.Rules.Add(new RouteRule { Stage = stage, FieldKey = rule.FieldKey, Operator = rule.Operator, Value = rule.Value });
         foreach (var policy in source.AlertPolicies) stage.AlertPolicies.Add(new AlertPolicy { Stage = stage, EventType = policy.EventType, RecipientStrategy = policy.RecipientStrategy, DelayHours = policy.DelayHours, InAppEnabled = policy.InAppEnabled, EmailEnabled = policy.EmailEnabled, TeamsEnabled = policy.TeamsEnabled, MaxDeliveryAttempts = policy.MaxDeliveryAttempts, IsEnabled = policy.IsEnabled });
         return stage;
@@ -375,7 +381,7 @@ else
 
     private static ApprovalRouteStage ToEntity(StageEditor editor, ApprovalRouteVersion version)
     {
-        var stage = new ApprovalRouteStage { RouteVersion = version, Sequence = editor.Sequence, Name = editor.Name.Trim(), AssignmentStrategy = editor.AssignmentStrategy, NamedApproverId = editor.AssignmentStrategy == AssignmentStrategy.NamedUser ? editor.NamedApproverId : null, AssigneeFieldKey = editor.AssignmentStrategy == AssignmentStrategy.UserField ? editor.AssigneeFieldKey : null, SignatureRequired = true, IsConditional = editor.IsConditional };
+        var stage = new ApprovalRouteStage { RouteVersion = version, StageKey = editor.StageKey, Sequence = editor.Sequence, Name = editor.Name.Trim(), AssignmentStrategy = editor.AssignmentStrategy, NamedApproverId = editor.AssignmentStrategy == AssignmentStrategy.NamedUser ? editor.NamedApproverId : null, AssigneeFieldKey = editor.AssignmentStrategy == AssignmentStrategy.UserField ? editor.AssigneeFieldKey : null, SignatureRequired = true, IsConditional = editor.IsConditional };
         if (editor.IsConditional) foreach (var rule in editor.Rules) stage.Rules.Add(new RouteRule { Stage = stage, FieldKey = rule.FieldKey, Operator = rule.Operator, Value = rule.Value.Trim() });
         foreach (var alert in editor.Alerts) stage.AlertPolicies.Add(new AlertPolicy { Stage = stage, EventType = alert.EventType, RecipientStrategy = alert.RecipientStrategy, DelayHours = alert.DelayHours, InAppEnabled = alert.InApp, EmailEnabled = alert.Email, TeamsEnabled = alert.Teams, MaxDeliveryAttempts = 3, IsEnabled = alert.Enabled });
         return stage;
@@ -399,7 +405,7 @@ else
 
     private sealed record DocumentTypeSummary(Guid Id, string Name);
     private sealed class RouteEditor { public Guid Id { get; set; } public string Name { get; set; } = ""; public int VersionNumber { get; set; } public RouteVersionStatus Status { get; set; } public List<StageEditor> Stages { get; set; } = []; }
-    private sealed class StageEditor { public Guid ClientId { get; set; } = Guid.NewGuid(); public int Sequence { get; set; } public string Name { get; set; } = ""; public AssignmentStrategy AssignmentStrategy { get; set; } = AssignmentStrategy.NamedUser; public Guid? NamedApproverId { get; set; } public string? AssigneeFieldKey { get; set; } public bool IsConditional { get; set; } public List<RuleEditor> Rules { get; set; } = []; public List<AlertEditor> Alerts { get; set; } = DefaultAlerts(); }
+    private sealed class StageEditor { public Guid ClientId { get; set; } = Guid.NewGuid(); public string StageKey { get; set; } = Guid.NewGuid().ToString("N"); public int Sequence { get; set; } public string Name { get; set; } = ""; public AssignmentStrategy AssignmentStrategy { get; set; } = AssignmentStrategy.NamedUser; public Guid? NamedApproverId { get; set; } public string? AssigneeFieldKey { get; set; } public bool IsConditional { get; set; } public List<RuleEditor> Rules { get; set; } = []; public List<AlertEditor> Alerts { get; set; } = DefaultAlerts(); }
     private sealed class RuleEditor { public Guid ClientId { get; set; } = Guid.NewGuid(); public string FieldKey { get; set; } = ""; public ComparisonOperator Operator { get; set; } = ComparisonOperator.Equal; public string Value { get; set; } = ""; }
     private sealed class AlertEditor { public AlertEventType EventType { get; set; } public bool Enabled { get; set; } = true; public int DelayHours { get; set; } public AlertRecipientStrategy RecipientStrategy { get; set; } public bool InApp { get; set; } public bool Email { get; set; } public bool Teams { get; set; } }
 }

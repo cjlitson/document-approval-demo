@@ -14,6 +14,18 @@ public enum NotificationChannel { InApp, Email, Teams }
 public enum AlertEventType { Assignment, Reminder, Escalation, Outcome }
 public enum AlertRecipientStrategy { StageApprover, ApproverManagerOrAdministrator, Requester }
 public enum NotificationStatus { Pending, Delivered, Failed, Cancelled }
+public enum DocumentTypeAccessRole { Administrator, Coordinator, Viewer }
+public enum LifecycleNotificationEvent { RequestSubmitted, StageStarted, StageCompleted, RequestRejected, RequestCompleted }
+public enum LifecycleNotificationRecipient
+{
+    Requester,
+    DocumentTypeAdministrators,
+    DocumentTypeCoordinators,
+    NamedUser,
+    UserFromRequestField,
+    CurrentApprover,
+    RequesterManager
+}
 
 public static class Roles
 {
@@ -49,6 +61,43 @@ public sealed class DocumentType
     public bool ManagerConfirmationRequired { get; set; } = true;
     public ICollection<DocumentFieldDefinition> Fields { get; set; } = new List<DocumentFieldDefinition>();
     public ICollection<ApprovalRoute> Routes { get; set; } = new List<ApprovalRoute>();
+    public ICollection<DocumentTypeAccess> AccessAssignments { get; set; } = new List<DocumentTypeAccess>();
+    public ICollection<LifecycleNotificationRule> LifecycleNotificationRules { get; set; } = new List<LifecycleNotificationRule>();
+}
+
+public sealed class DocumentTypeAccess
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid DocumentTypeId { get; set; }
+    public DocumentType DocumentType { get; set; } = null!;
+    public Guid UserId { get; set; }
+    public ApplicationUser User { get; set; } = null!;
+    public DocumentTypeAccessRole AccessRole { get; set; }
+    public bool IsActive { get; set; } = true;
+    public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+    public Guid? CreatedByUserId { get; set; }
+}
+
+public sealed class LifecycleNotificationRule
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid DocumentTypeId { get; set; }
+    public DocumentType DocumentType { get; set; } = null!;
+    public LifecycleNotificationEvent EventType { get; set; }
+    [MaxLength(80)] public string? StageKey { get; set; }
+    public LifecycleNotificationRecipient RecipientType { get; set; }
+    public Guid? NamedUserId { get; set; }
+    public ApplicationUser? NamedUser { get; set; }
+    [MaxLength(80)] public string? UserFieldKey { get; set; }
+    public bool SendInApp { get; set; } = true;
+    public bool SendEmail { get; set; }
+    public bool SendTeams { get; set; }
+    public bool IsEnabled { get; set; } = true;
+    public int DelayHours { get; set; }
+    public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+    public Guid? CreatedByUserId { get; set; }
+    public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+    public Guid? UpdatedByUserId { get; set; }
 }
 
 public sealed class DocumentFieldDefinition
@@ -167,6 +216,7 @@ public sealed class ApprovalRouteStage
     public Guid RouteVersionId { get; set; }
     public ApprovalRouteVersion RouteVersion { get; set; } = null!;
     public int Sequence { get; set; }
+    [MaxLength(80)] public string StageKey { get; set; } = Guid.NewGuid().ToString("N");
     [MaxLength(100)] public string Name { get; set; } = "";
     public AssignmentStrategy AssignmentStrategy { get; set; } = AssignmentStrategy.NamedUser;
     public Guid? NamedApproverId { get; set; }
@@ -245,7 +295,9 @@ public sealed class NotificationOutbox
     public ApprovalRequest? Request { get; set; }
     public Guid? ApprovalInstanceId { get; set; }
     public Guid? AlertPolicyId { get; set; }
+    public Guid? LifecycleNotificationRuleId { get; set; }
     public AlertEventType EventType { get; set; }
+    public LifecycleNotificationEvent? LifecycleEventType { get; set; }
     public NotificationChannel Channel { get; set; }
     [MaxLength(200)] public string Subject { get; set; } = "";
     [MaxLength(2000)] public string Body { get; set; } = "";

@@ -1,0 +1,14 @@
+@model ManagedRequestsViewModel
+@{
+    ViewData["Title"] = "Managed Requests";
+}
+<div class="page-heading"><div><p class="eyebrow">Operational oversight</p><h1>Managed Requests</h1><p>Track workflow position and follow-up for the Document Types assigned to you.</p></div></div>
+<section class="panel data-workspace">
+    <form method="get" class="table-toolbar" role="search">
+        <label class="search-field"><span class="visually-hidden">Search requests</span><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="6" /><path d="m14 14 4 4" /></svg><input type="search" name="search" value="@Model.Search" placeholder="Search number, title, or requester" /></label>
+        <label><span class="visually-hidden">Document type</span><select name="documentTypeId"><option value="">All assigned types</option>@foreach(var item in Model.DocumentTypes){<option value="@item.Value" selected="@item.Selected">@item.Text</option>}</select></label>
+        <label><span class="visually-hidden">Status</span><select name="status"><option value="">All statuses</option>@foreach(var value in Enum.GetValues<RequestStatus>()){<option value="@value" selected="@(Model.Status == value.ToString())">@value</option>}</select></label>
+        <button class="button" type="submit">Apply filters</button>
+    </form>
+    <partial name="_ManagedRequestsTable" model="@Model.Requests" />
+</section>

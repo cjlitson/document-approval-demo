@@ -7,6 +7,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
 {
     public DbSet<ApplicationUser> Users => Set<ApplicationUser>();
     public DbSet<DocumentType> DocumentTypes => Set<DocumentType>();
+    public DbSet<DocumentTypeAccess> DocumentTypeAccess => Set<DocumentTypeAccess>();
+    public DbSet<LifecycleNotificationRule> LifecycleNotificationRules => Set<LifecycleNotificationRule>();
     public DbSet<DocumentFieldDefinition> DocumentFields => Set<DocumentFieldDefinition>();
     public DbSet<ApprovalRequest> Requests => Set<ApprovalRequest>();
     public DbSet<RequestFieldValue> RequestFieldValues => Set<RequestFieldValue>();
@@ -30,6 +32,17 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
 
         modelBuilder.Entity<DocumentType>().HasIndex(x => x.Key).IsUnique();
         modelBuilder.Entity<DocumentFieldDefinition>().HasIndex(x => new { x.DocumentTypeId, x.Key }).IsUnique();
+        modelBuilder.Entity<DocumentTypeAccess>().HasIndex(x => new { x.DocumentTypeId, x.UserId }).IsUnique();
+        modelBuilder.Entity<DocumentTypeAccess>()
+            .HasOne(x => x.DocumentType).WithMany(x => x.AccessAssignments)
+            .HasForeignKey(x => x.DocumentTypeId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<DocumentTypeAccess>()
+            .HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<LifecycleNotificationRule>()
+            .HasOne(x => x.DocumentType).WithMany(x => x.LifecycleNotificationRules)
+            .HasForeignKey(x => x.DocumentTypeId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<LifecycleNotificationRule>()
+            .HasOne(x => x.NamedUser).WithMany().HasForeignKey(x => x.NamedUserId).OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<ApprovalRequest>().HasIndex(x => x.RequestNumber).IsUnique();
         modelBuilder.Entity<ApprovalRequest>()
@@ -44,6 +57,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         modelBuilder.Entity<ApprovalRoute>()
             .HasOne(x => x.DocumentType).WithMany(x => x.Routes).HasForeignKey(x => x.DocumentTypeId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<ApprovalRouteVersion>().HasIndex(x => new { x.RouteId, x.VersionNumber }).IsUnique();
+        modelBuilder.Entity<ApprovalRouteStage>().HasIndex(x => new { x.RouteVersionId, x.StageKey }).IsUnique();
         modelBuilder.Entity<ApprovalRouteStage>()
             .HasOne(x => x.NamedApprover).WithMany().HasForeignKey(x => x.NamedApproverId).OnDelete(DeleteBehavior.Restrict);
 
@@ -58,5 +72,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             .HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<NotificationOutbox>()
             .HasOne(x => x.Request).WithMany().HasForeignKey(x => x.RequestId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<NotificationOutbox>()
+            .HasOne<LifecycleNotificationRule>().WithMany().HasForeignKey(x => x.LifecycleNotificationRuleId).OnDelete(DeleteBehavior.Restrict);
     }
 }

@@ -17,7 +17,10 @@ public sealed class RequestsController(
     ICurrentUserService currentUser,
     IWorkflowService workflow,
     IFileStorageService fileStorage,
-    ISignedPackageService signedPackage) : Controller
+    IFilePreviewService filePreview,
+    IDocumentAuthorizationService authorization,
+    IApprovalRecordService approvalRecord,
+    IDocumentPackageService documentPackage) : Controller
 {
     [HttpGet("")]
     public async Task<IActionResult> Index(CancellationToken cancellationToken)
@@ -143,11 +146,59 @@ public sealed class RequestsController(
     {
         var request = await LoadDetailsAsync(id, cancellationToken);
         if (request is null) return NotFound();
-        if (!await CanViewAsync(request, cancellationToken)) return Forbid();
+        if (!await authorization.CanViewRequestAsync(id, currentUser.UserId, User.IsInRole(Roles.SystemAdmin), cancellationToken)) return Forbid();
+        var activity = await LoadActivityAsync(id, cancellationToken);
+        var actorIds = activity.Select(x => x.ActorUserId).Distinct().ToList();
+        var actorLookup = actorIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await db.Users.AsNoTracking().Where(x => actorIds.Contains(x.Id))
+                .ToDictionaryAsync(x => x.Id, x => x.FullName, cancellationToken);
+        var documents = new List<RequestDocumentViewModel>();
+        if (request.Status == RequestStatus.Approved)
+        {
+            documents.Add(new RequestDocumentViewModel
+            {
+                Name = $"{request.RequestNumber}-Approval-Record.pdf",
+                TypeLabel = "Approval Record",
+                IsApprovalRecord = true,
+                CanPreview = true,
+                PreviewUrl = Url.Action(nameof(ApprovalRecordPreview), new { id = request.Id })!,
+                DownloadUrl = Url.Action(nameof(ApprovalRecordDownload), new { id = request.Id })!
+            });
+        }
+        documents.AddRange(request.Attachments.OrderByDescending(x => x.RevisionNumber).ThenBy(x => x.OriginalFileName)
+            .Select(attachment =>
+            {
+                var capability = filePreview.GetCapability(attachment);
+                return new RequestDocumentViewModel
+                {
+                    AttachmentId = attachment.Id,
+                    Name = attachment.OriginalFileName,
+                    TypeLabel = FriendlyFileType(attachment.OriginalFileName),
+                    Revision = attachment.RevisionNumber,
+                    SizeBytes = attachment.SizeBytes,
+                    CanPreview = capability.CanPreview,
+                    PreviewUnavailableReason = capability.UnavailableReason,
+                    PreviewUrl = capability.CanPreview
+                        ? Url.Action(nameof(PreviewAttachment), new { requestId = request.Id, attachmentId = attachment.Id })!
+                        : "",
+                    DownloadUrl = Url.Action(nameof(DownloadAttachment), new { requestId = request.Id, attachmentId = attachment.Id })!
+                };
+            }));
         return View(new RequestDetailsViewModel
         {
             Request = request,
-            RoutingHistory = RoutingHistoryViewModel.Create(request)
+            RoutingHistory = RoutingHistoryViewModel.Create(request),
+            WorkflowProgress = WorkflowProgressViewModel.Create(request),
+            Documents = documents,
+            Activity = activity.OrderByDescending(x => x.OccurredAtUtc).Select(x => new RequestActivityViewModel
+            {
+                EventType = x.EventType,
+                Details = x.Details,
+                ActorName = actorLookup.GetValueOrDefault(x.ActorUserId, "System"),
+                OccurredAtUtc = x.OccurredAtUtc
+            }).ToList(),
+            PackageAvailable = request.Status == RequestStatus.Approved
         });
     }
 
@@ -242,39 +293,89 @@ public sealed class RequestsController(
     }
 
     [HttpGet("{requestId:guid}/attachments/{attachmentId:guid}")]
-    public async Task<IActionResult> Attachment(Guid requestId, Guid attachmentId, CancellationToken cancellationToken)
+    public IActionResult Attachment(Guid requestId, Guid attachmentId) =>
+        RedirectToAction(nameof(DownloadAttachment), new { requestId, attachmentId });
+
+    [HttpGet("{requestId:guid}/attachments/{attachmentId:guid}/preview")]
+    public async Task<IActionResult> PreviewAttachment(Guid requestId, Guid attachmentId, CancellationToken cancellationToken)
     {
-        var request = await db.Requests.Include(x => x.Approvals).SingleOrDefaultAsync(x => x.Id == requestId, cancellationToken);
-        if (request is null) return NotFound();
-        if (!await CanViewAsync(request, cancellationToken)) return Forbid();
-        var attachment = await db.Attachments.SingleOrDefaultAsync(x => x.Id == attachmentId && x.RequestId == requestId, cancellationToken);
+        if (!await db.Requests.AsNoTracking().AnyAsync(x => x.Id == requestId, cancellationToken)) return NotFound();
+        if (!await authorization.CanViewRequestAsync(requestId, currentUser.UserId, User.IsInRole(Roles.SystemAdmin), cancellationToken)) return Forbid();
+        var attachment = await db.Attachments.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == attachmentId && x.RequestId == requestId, cancellationToken);
         if (attachment is null) return NotFound();
         var stream = await fileStorage.OpenReadAsync(attachment.StoredFileName, cancellationToken);
-        return File(stream, attachment.ContentType, attachment.OriginalFileName);
+        var capability = await filePreview.InspectAsync(attachment, stream, cancellationToken);
+        if (!capability.CanPreview)
+        {
+            await stream.DisposeAsync();
+            return StatusCode(StatusCodes.Status415UnsupportedMediaType, capability.UnavailableReason);
+        }
+        AddDocumentSecurityHeaders();
+        Response.Headers.ContentDisposition = $"inline; filename*=UTF-8''{Uri.EscapeDataString(Path.GetFileName(attachment.OriginalFileName))}";
+        return File(stream, capability.ContentType, enableRangeProcessing: true);
     }
 
-    [HttpGet("{id:guid}/signed-package")]
-    public async Task<IActionResult> SignedPackage(Guid id, CancellationToken cancellationToken)
+    [HttpGet("{requestId:guid}/attachments/{attachmentId:guid}/download")]
+    public async Task<IActionResult> DownloadAttachment(Guid requestId, Guid attachmentId, CancellationToken cancellationToken)
+    {
+        if (!await db.Requests.AsNoTracking().AnyAsync(x => x.Id == requestId, cancellationToken)) return NotFound();
+        if (!await authorization.CanViewRequestAsync(requestId, currentUser.UserId, User.IsInRole(Roles.SystemAdmin), cancellationToken)) return Forbid();
+        var attachment = await db.Attachments.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == attachmentId && x.RequestId == requestId, cancellationToken);
+        if (attachment is null) return NotFound();
+        var stream = await fileStorage.OpenReadAsync(attachment.StoredFileName, cancellationToken);
+        var contentType = await filePreview.GetDownloadContentTypeAsync(attachment, stream, cancellationToken);
+        AddDocumentSecurityHeaders();
+        return File(stream, contentType, Path.GetFileName(attachment.OriginalFileName), enableRangeProcessing: true);
+    }
+
+    [HttpGet("{id:guid}/approval-record/preview")]
+    public async Task<IActionResult> ApprovalRecordPreview(Guid id, CancellationToken cancellationToken)
     {
         var request = await LoadDetailsAsync(id, cancellationToken);
         if (request is null) return NotFound();
-        if (!await CanViewAsync(request, cancellationToken)) return Forbid();
-        if (request.Status != RequestStatus.Approved) return BadRequest("The signed package is available after final approval.");
-        var bytes = signedPackage.Build(request);
-        return File(bytes, "application/pdf", $"{request.RequestNumber}-signed-package.pdf");
+        if (!await authorization.CanViewRequestAsync(id, currentUser.UserId, User.IsInRole(Roles.SystemAdmin), cancellationToken)) return Forbid();
+        if (request.Status != RequestStatus.Approved) return BadRequest("The Approval Record is available after final approval.");
+        var bytes = approvalRecord.Build(request, await LoadActivityAsync(id, cancellationToken));
+        AddDocumentSecurityHeaders();
+        Response.Headers.ContentDisposition = $"inline; filename*=UTF-8''{Uri.EscapeDataString(request.RequestNumber + "-Approval-Record.pdf")}";
+        return File(bytes, "application/pdf");
     }
 
-    private async Task<bool> CanViewAsync(ApprovalRequest request, CancellationToken cancellationToken) =>
-        request.RequesterId == currentUser.UserId ||
-        request.Approvals.Any(x => x.ApproverId == currentUser.UserId) ||
-        User.IsInRole(Roles.SystemAdmin) ||
-        await db.NotificationOutbox.AnyAsync(x => x.RequestId == request.Id && x.UserId == currentUser.UserId, cancellationToken);
+    [HttpGet("{id:guid}/approval-record/download")]
+    public async Task<IActionResult> ApprovalRecordDownload(Guid id, CancellationToken cancellationToken)
+    {
+        var request = await LoadDetailsAsync(id, cancellationToken);
+        if (request is null) return NotFound();
+        if (!await authorization.CanViewRequestAsync(id, currentUser.UserId, User.IsInRole(Roles.SystemAdmin), cancellationToken)) return Forbid();
+        if (request.Status != RequestStatus.Approved) return BadRequest("The Approval Record is available after final approval.");
+        var bytes = approvalRecord.Build(request, await LoadActivityAsync(id, cancellationToken));
+        AddDocumentSecurityHeaders();
+        return File(bytes, "application/pdf", $"{request.RequestNumber}-Approval-Record.pdf");
+    }
+
+    [HttpGet("{id:guid}/package")]
+    public async Task<IActionResult> Package(Guid id, CancellationToken cancellationToken)
+    {
+        var request = await LoadDetailsAsync(id, cancellationToken);
+        if (request is null) return NotFound();
+        if (!await authorization.CanViewRequestAsync(id, currentUser.UserId, User.IsInRole(Roles.SystemAdmin), cancellationToken)) return Forbid();
+        if (request.Status != RequestStatus.Approved) return BadRequest("The document package is available after final approval.");
+        var bytes = await documentPackage.BuildAsync(request, await LoadActivityAsync(id, cancellationToken), cancellationToken);
+        AddDocumentSecurityHeaders();
+        return File(bytes, "application/zip", $"{request.RequestNumber}-Approved-Package.zip");
+    }
+
+    [HttpGet("{id:guid}/signed-package")]
+    public IActionResult SignedPackage(Guid id) => RedirectToAction(nameof(ApprovalRecordDownload), new { id });
 
     private Task<ApprovalRequest?> LoadDetailsAsync(Guid id, CancellationToken cancellationToken) =>
         db.Requests
             .Include(x => x.DocumentType)
             .Include(x => x.FieldValues)
-            .Include(x => x.Requester).Include(x => x.ConfirmedManager).Include(x => x.RouteVersion)
+            .Include(x => x.Requester).Include(x => x.ConfirmedManager)
+            .Include(x => x.RouteVersion).ThenInclude(x => x!.Stages).ThenInclude(x => x.Rules)
             .Include(x => x.Revisions)
             .Include(x => x.Attachments)
             .Include(x => x.Approvals).ThenInclude(x => x.Approver)
@@ -283,7 +384,9 @@ public sealed class RequestsController(
 
     private async Task<DocumentType?> SelectDocumentTypeAsync(Guid? id, CancellationToken cancellationToken)
     {
-        var query = db.DocumentTypes.AsNoTracking().Include(x => x.Fields).Where(x => x.IsActive);
+        var query = db.DocumentTypes.AsNoTracking().Include(x => x.Fields)
+            .Where(x => x.IsActive && x.Routes.SelectMany(route => route.Versions)
+                .Any(version => version.Status == RouteVersionStatus.Published));
         if (id.HasValue)
         {
             var selected = await query.SingleOrDefaultAsync(x => x.Id == id.Value, cancellationToken);
@@ -297,7 +400,9 @@ public sealed class RequestsController(
         model.DocumentTypeId = type.Id;
         model.DocumentTypeName = type.Name;
         model.DocumentTypeDescription = type.Description;
-        model.DocumentTypes = await db.DocumentTypes.AsNoTracking().Where(x => x.IsActive)
+        model.DocumentTypes = await db.DocumentTypes.AsNoTracking()
+            .Where(x => x.IsActive && x.Routes.SelectMany(route => route.Versions)
+                .Any(version => version.Status == RouteVersionStatus.Published))
             .OrderBy(x => x.Key == "purchase-request" ? 0 : 1).ThenBy(x => x.Name)
             .Select(x => new SelectListItem(x.Name, x.Id.ToString(), x.Id == type.Id)).ToListAsync(cancellationToken);
         model.Managers = await db.Users.AsNoTracking().Where(x => x.IsActive && x.Id != userId)
@@ -458,4 +563,26 @@ public sealed class RequestsController(
             .Max() + 1;
         return $"{prefix}{next:0000}";
     }
+
+    private Task<List<AuditEvent>> LoadActivityAsync(Guid requestId, CancellationToken cancellationToken) =>
+        db.AuditEvents.AsNoTracking().Where(x => x.RequestId == requestId).ToListAsync(cancellationToken);
+
+    private void AddDocumentSecurityHeaders()
+    {
+        Response.Headers["Cache-Control"] = "private, no-store";
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
+        Response.Headers["X-Frame-Options"] = "SAMEORIGIN";
+        Response.Headers["Content-Security-Policy"] = "default-src 'none'; img-src 'self' data: blob:; style-src 'unsafe-inline'; frame-ancestors 'self'";
+    }
+
+    private static string FriendlyFileType(string fileName) => Path.GetExtension(fileName).ToLowerInvariant() switch
+    {
+        ".pdf" => "PDF",
+        ".png" => "PNG image",
+        ".jpg" or ".jpeg" => "JPEG image",
+        ".txt" => "Text",
+        ".doc" or ".docx" => "Microsoft Word",
+        ".xls" or ".xlsx" => "Microsoft Excel",
+        _ => "File"
+    };
 }
