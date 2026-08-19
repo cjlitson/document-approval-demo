@@ -350,7 +350,7 @@ public sealed class ApprovalRecordService : IApprovalRecordService
 
     private static void Pad(Row row)
     {
-        foreach (var cell in row.Cells)
+        foreach (var cell in row.Cells.OfType<Cell>())
         {
             cell.TopPadding = Unit.FromPoint(3.2);
             cell.BottomPadding = Unit.FromPoint(3.2);
