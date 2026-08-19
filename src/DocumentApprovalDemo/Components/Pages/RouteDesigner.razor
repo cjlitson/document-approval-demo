@@ -327,7 +327,10 @@ else
                         }
                     </section>
                     <section><h3>Changes from @(PublishDiff.PreviousVersionNumber.HasValue ? $"version {PublishDiff.PreviousVersionNumber}" : "no prior version")</h3>
-                        @if (!PublishDiff.HasChanges)<p>No semantic changes detected.</p>
+                        @if (!PublishDiff.HasChanges)
+                        {
+                            <p>No semantic changes detected.</p>
+                        }
                         @foreach (var group in PublishDiff.Items.GroupBy(x => x.Kind))
                         {
                             <div class="diff-group">
