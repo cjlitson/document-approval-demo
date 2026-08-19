@@ -191,7 +191,7 @@ public sealed class ConditionEvaluator(TimeProvider timeProvider) : IConditionEv
         if (!stage.IsConditional)
             return new(true, null, "Always runs.");
 
-        var root = stage.ConditionGroups.SingleOrDefault(x => x.ParentGroupId is null);
+        var root = stage.ConditionGroups.SingleOrDefault(x => x.ParentGroupId is null && x.ParentGroup is null);
         if (root is null)
             return new(false, null, "Conditional stage has no root condition group.");
 
@@ -370,7 +370,7 @@ public static class ConditionFormatter
     public static string StageSummary(ApprovalRouteStage stage, IReadOnlyCollection<ConditionField> fields)
     {
         if (!stage.IsConditional) return "Always runs";
-        var root = stage.ConditionGroups.SingleOrDefault(x => x.ParentGroupId is null);
+        var root = stage.ConditionGroups.SingleOrDefault(x => x.ParentGroupId is null && x.ParentGroup is null);
         return root is null ? "Conditional · incomplete" : FormatGroup(root, stage.ConditionGroups, fields);
     }
 
