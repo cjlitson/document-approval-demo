@@ -45,7 +45,7 @@ public sealed class DocumentPackageServiceTests
         Assert.NotNull(archive.GetEntry("PUR-2026-0048-Approval-Record.pdf"));
         Assert.NotNull(archive.GetEntry("Attachments/Revision-01/Vendor Quote.pdf"));
         Assert.NotNull(archive.GetEntry("Attachments/Revision-02/Notes.txt"));
-        var manifestEntry = Assert.Single(archive.Entries.Where(x => x.FullName == "Package-Manifest.json"));
+        var manifestEntry = Assert.Single(archive.Entries, x => x.FullName == "Package-Manifest.json");
         await using var manifestStream = manifestEntry.Open();
         var manifest = await JsonSerializer.DeserializeAsync<DocumentPackageManifest>(
             manifestStream,
@@ -57,7 +57,7 @@ public sealed class DocumentPackageServiceTests
 
         foreach (var item in manifest.Attachments)
         {
-            var entry = Assert.Single(archive.Entries.Where(x => x.FullName == item.PackagedFilename));
+            var entry = Assert.Single(archive.Entries, x => x.FullName == item.PackagedFilename);
             await using var entryStream = entry.Open();
             using var buffer = new MemoryStream();
             await entryStream.CopyToAsync(buffer);
