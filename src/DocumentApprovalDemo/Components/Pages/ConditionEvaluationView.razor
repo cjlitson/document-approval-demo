@@ -1,0 +1,33 @@
+@if (Node is ConditionRuleEvaluationResult rule)
+{
+    <li class="evaluation-rule @(rule.IsMatch ? "is-match" : "is-fail")" style="--condition-depth:@Depth">
+        <span class="evaluation-symbol" aria-hidden="true">@(rule.IsMatch ? "✓" : "×")</span>
+        <div>
+            <strong>@rule.FieldLabel @ConditionOperatorCatalog.Label(rule.Operator) @Expected(rule.ExpectedValues)</strong>
+            <small>Actual: @(string.IsNullOrWhiteSpace(rule.ActualValue) ? "Empty" : rule.ActualValue) · @(rule.IsMatch ? "Match" : "No match")</small>
+        </div>
+    </li>
+}
+else if (Node is ConditionGroupEvaluationResult group)
+{
+    <li class="evaluation-group @(group.IsMatch ? "is-match" : "is-fail")" style="--condition-depth:@Depth">
+        <div class="evaluation-group-heading">
+            <span class="evaluation-symbol" aria-hidden="true">@(group.IsMatch ? "✓" : "×")</span>
+            <strong>@group.Combinator.ToString().ToUpperInvariant() group @(group.IsMatch ? "passed" : "failed")</strong>
+        </div>
+        <ul>
+            @foreach (var child in group.Children.OrderBy(x => x.Sequence))
+            {
+                <ConditionEvaluationView Node="child" Depth="@(Depth + 1)" />
+            }
+        </ul>
+    </li>
+}
+
+@code {
+    [Parameter, EditorRequired] public ConditionNodeEvaluationResult Node { get; set; } = null!;
+    [Parameter] public int Depth { get; set; }
+
+    private static string Expected(IReadOnlyList<string> values) =>
+        values.Count == 0 ? "" : string.Join(" and ", values);
+}

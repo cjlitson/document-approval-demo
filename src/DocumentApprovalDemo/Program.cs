@@ -46,7 +46,13 @@ builder.Services.AddDbContextFactory<AppDbContext>(ConfigureDatabase);
 builder.Services.AddScoped(sp => sp.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext());
 
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+builder.Services.AddScoped<IConditionEvaluator, ConditionEvaluator>();
+builder.Services.AddScoped<IRouteValidationService, RouteValidationService>();
+builder.Services.AddScoped<IRouteVersionCloningService, RouteVersionCloningService>();
+builder.Services.AddScoped<IRouteVersionDiffService, RouteVersionDiffService>();
+builder.Services.AddScoped<IRouteSimulationService, RouteSimulationService>();
 builder.Services.AddScoped<IRoutingService, RoutingService>();
 builder.Services.AddScoped<IWorkflowService, WorkflowService>();
 builder.Services.AddScoped<IFileStorageService, LocalFileStorageService>();

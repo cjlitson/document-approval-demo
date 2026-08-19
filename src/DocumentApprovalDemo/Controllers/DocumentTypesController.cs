@@ -321,7 +321,7 @@ public sealed partial class DocumentTypesController(
         var field = await db.DocumentFields.SingleOrDefaultAsync(x => x.Id == fieldId && x.DocumentTypeId == id, cancellationToken);
         if (field is null) return NotFound();
         var usedByRequest = await db.RequestFieldValues.AnyAsync(x => x.FieldDefinitionId == fieldId, cancellationToken);
-        var usedByRoute = await db.RouteRules.AnyAsync(x => x.Stage.RouteVersion.Route.DocumentTypeId == id && x.FieldKey == field.Key, cancellationToken) ||
+        var usedByRoute = await db.RouteConditionRules.AnyAsync(x => x.Group.Stage.RouteVersion.Route.DocumentTypeId == id && x.FieldKey == field.Key, cancellationToken) ||
                           await db.RouteStages.AnyAsync(x => x.RouteVersion.Route.DocumentTypeId == id && x.AssigneeFieldKey == field.Key, cancellationToken);
         if (usedByRequest || usedByRoute)
         {

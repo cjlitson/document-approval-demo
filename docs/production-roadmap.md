@@ -6,6 +6,7 @@
 - Demonstrate scoped access with Taylor Purchasing and Jordan Smith; verify that Purchase Request access does not leak to Policy Approval.
 - Complete the acceptance flow with PDF, image, and Office attachments, conditional approval, completion notification, Approval Record, original downloads, and revision-aware ZIP.
 - Validate manager, named-person, and person-field assignment with business owners.
+- Validate the sequential visual designer, nested AND/OR semantics, typed operators, explainable simulator, publish readiness, and semantic route comparison with workflow administrators.
 - Confirm lifecycle events, recipients, delay semantics, reminder timing, escalation recipients, and operational ownership.
 - Obtain legal/compliance/records acceptance of authenticated typed-name evidence and package contents for each included document class.
 - Confirm file types, size limits, retention, accessibility, and support ownership.
@@ -25,7 +26,7 @@
 ## Phase 3 — Expand governance and routing
 
 - Add explicit access-assignment expiry/review, bulk administration, separation-of-duties checks, and delegated configuration approval if required.
-- Add richer condition groups with explicit AND/OR nesting, parallel stages, multiple approvers, observers, delegation, out-of-office handling, and business calendars.
+- Extend the implemented nested AND/OR condition engine with true graph execution, parallel stages, multiple approvers, quorum rules, observers, delegation, out-of-office handling, and business calendars.
 - Add lifecycle-rule templates, delivery diagnostics, escalation ownership, and approved HTML/text notification templates.
 - Integrate an approved Microsoft 365/SharePoint/Graph preview provider for Office files behind `IFilePreviewService`; continue to prohibit public viewers.
 - Add document classification, retention, package templates, legal hold, integrity verification, and records disposition by Document Type.

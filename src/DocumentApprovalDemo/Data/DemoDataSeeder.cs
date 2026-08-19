@@ -81,10 +81,8 @@ public static class DemoDataSeeder
         var purchaseVersion = PublishedVersion(purchaseRoute, "Purchase pilot route", 1);
         var managerStage = Stage(purchaseVersion, 1, "Manager Review", AssignmentStrategy.RequesterManager);
         var executiveStage = Stage(purchaseVersion, 2, "Executive Review", AssignmentStrategy.NamedUser, PresidentId, conditional: true);
-        executiveStage.Rules.Add(new RouteRule
-        {
-            Stage = executiveStage, FieldKey = "amount", Operator = ComparisonOperator.GreaterThan, Value = "1000"
-        });
+        var executiveRoot = ConditionGroup(executiveStage, ConditionCombinator.And, "purchase-executive-root");
+        ConditionRule(executiveRoot, "amount", ComparisonOperator.GreaterThan, "purchase-amount-threshold", "1000");
         Stage(purchaseVersion, 3, "Financial Control Review", AssignmentStrategy.NamedUser, FinanceId);
         purchase.AccessAssignments.Add(new DocumentTypeAccess
         {
@@ -132,10 +130,11 @@ public static class DemoDataSeeder
         var policyVersion = PublishedVersion(policyRoute, "Policy governance route", 1);
         Stage(policyVersion, 1, "Owner Manager Review", AssignmentStrategy.RequesterManager);
         var complianceStage = Stage(policyVersion, 2, "Compliance Review", AssignmentStrategy.NamedUser, AdminId, conditional: true);
-        complianceStage.Rules.Add(new RouteRule
-        {
-            Stage = complianceStage, FieldKey = "risk_level", Operator = ComparisonOperator.Equal, Value = "High"
-        });
+        var complianceRoot = ConditionGroup(complianceStage, ConditionCombinator.Or, "policy-compliance-root");
+        ConditionRule(complianceRoot, "risk_level", ComparisonOperator.Equals, "policy-high-risk", "High");
+        var executiveWindow = ConditionGroup(complianceStage, ConditionCombinator.And, "policy-executive-window", complianceRoot, 2);
+        ConditionRule(executiveWindow, "department", ComparisonOperator.Equals, "policy-executive-department", "Executive");
+        ConditionRule(executiveWindow, "effective_date", ComparisonOperator.InNextDays, "policy-effective-window", "30");
         Stage(policyVersion, 3, "Records Approval", AssignmentStrategy.UserField, assigneeFieldKey: "records_approver");
 
         db.DocumentTypes.AddRange(purchase, policy);
@@ -209,6 +208,46 @@ public static class DemoDataSeeder
         stage.AlertPolicies.Add(Policy(stage, AlertEventType.Reminder, AlertRecipientStrategy.StageApprover, 48, true, true, true));
         stage.AlertPolicies.Add(Policy(stage, AlertEventType.Escalation, AlertRecipientStrategy.ApproverManagerOrAdministrator, 120, true, true, true));
         stage.AlertPolicies.Add(Policy(stage, AlertEventType.Outcome, AlertRecipientStrategy.Requester, 0, true, true, false));
+    }
+
+    private static RouteConditionGroup ConditionGroup(
+        ApprovalRouteStage stage,
+        ConditionCombinator combinator,
+        string stableKey,
+        RouteConditionGroup? parent = null,
+        int sequence = 1)
+    {
+        var group = new RouteConditionGroup
+        {
+            Stage = stage,
+            ParentGroup = parent,
+            StableGroupKey = stableKey,
+            Combinator = combinator,
+            Sequence = sequence
+        };
+        stage.ConditionGroups.Add(group);
+        parent?.ChildGroups.Add(group);
+        return group;
+    }
+
+    private static void ConditionRule(
+        RouteConditionGroup group,
+        string fieldKey,
+        ComparisonOperator comparisonOperator,
+        string stableKey,
+        params string[] operands)
+    {
+        var rule = new RouteConditionRule
+        {
+            Group = group,
+            StableRuleKey = stableKey,
+            FieldKey = fieldKey,
+            Operator = comparisonOperator,
+            Sequence = group.Rules.Count + group.ChildGroups.Count + 1
+        };
+        for (var index = 0; index < operands.Length; index++)
+            rule.Operands.Add(new RouteConditionOperand { Rule = rule, Sequence = index + 1, Value = operands[index] });
+        group.Rules.Add(rule);
     }
 
     private static AlertPolicy Policy(
