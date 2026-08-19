@@ -320,7 +320,9 @@
         });
     };
 
-    document.querySelectorAll("select[data-combobox]").forEach((select) => {
+    const enhanceCombobox = (select) => {
+        if (!(select instanceof HTMLSelectElement) || select.dataset.comboboxEnhanced === "true") return;
+        select.dataset.comboboxEnhanced = "true";
         const search = document.createElement("input");
         search.type = "search";
         search.className = "combobox-search";
@@ -335,5 +337,13 @@
                 option.hidden = Boolean(term) && !option.text.toLocaleLowerCase().includes(term);
             });
         });
-    });
+    };
+    document.querySelectorAll("select[data-combobox]").forEach(enhanceCombobox);
+    new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => mutation.addedNodes.forEach((node) => {
+            if (!(node instanceof Element)) return;
+            if (node.matches("select[data-combobox]")) enhanceCombobox(node);
+            node.querySelectorAll("select[data-combobox]").forEach(enhanceCombobox);
+        }));
+    }).observe(shell, { childList: true, subtree: true });
 })();
