@@ -28,7 +28,7 @@ public sealed class SqliteControllerQueryTests
             CreateRequest("PUR-2026-0002", "Newer", requester, documentType, DateTimeOffset.UtcNow));
         await db.SaveChangesAsync();
 
-        var controller = new HomeController(db, new TestCurrentUserService(requester));
+        var controller = new HomeController(db, new TestCurrentUserService(requester), new DocumentAuthorizationService(db));
         var result = Assert.IsType<ViewResult>(await controller.Index(CancellationToken.None));
         var model = Assert.IsType<DashboardViewModel>(result.Model);
 

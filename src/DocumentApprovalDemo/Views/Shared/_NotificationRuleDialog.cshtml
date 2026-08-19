@@ -1,0 +1,16 @@
+@model NotificationRuleDialogViewModel
+<dialog class="sheet-dialog" id="@Model.DialogId" aria-labelledby="@($"{Model.DialogId}-title")">
+    <form method="dialog" class="dialog-close"><button aria-label="Close">×</button></form>
+    <form asp-controller="DocumentTypes" asp-action="SaveNotification" asp-route-id="@Model.DocumentTypeId" method="post" class="dialog-form">
+        <input type="hidden" name="Id" value="@Model.Rule.Id" />
+        <div><p class="eyebrow">Lifecycle notification</p><h2 id="@($"{Model.DialogId}-title")">@Model.Title</h2><p>This rule creates notification records only. It never creates an approval or signature requirement.</p></div>
+        <div class="field"><label>Event</label><select name="EventType">@foreach(var value in Enum.GetValues<LifecycleNotificationEvent>()){<option value="@value" selected="@(value == Model.Rule.EventType)">@value</option>}</select></div>
+        <div class="field"><label>Optional stage</label><select name="StageKey"><option value="">Any stage / not applicable</option>@foreach(var stage in Model.Stages){<option value="@stage.StageKey" selected="@(stage.StageKey == Model.Rule.StageKey)">@stage.Name</option>}</select></div>
+        <div class="field"><label>Recipients</label><select name="RecipientType">@foreach(var value in Enum.GetValues<LifecycleNotificationRecipient>()){<option value="@value" selected="@(value == Model.Rule.RecipientType)">@value</option>}</select></div>
+        <div class="field"><label>Named user</label><select name="NamedUserId"><option value="">Not applicable</option>@foreach(var user in Model.Users){<option value="@user.Value" selected="@(user.Value == Model.Rule.NamedUserId?.ToString())">@user.Text</option>}</select></div>
+        <div class="field"><label>User field</label><select name="UserFieldKey"><option value="">Not applicable</option>@foreach(var field in Model.Fields.Where(x => x.FieldType == DocumentFieldType.User)){<option value="@field.Key" selected="@(field.Key == Model.Rule.UserFieldKey)">@field.Label</option>}</select></div>
+        <div class="field"><label>Delay in hours</label><input type="number" min="0" max="720" name="DelayHours" value="@Model.Rule.DelayHours" /></div>
+        <div class="channel-checks"><label><input type="checkbox" name="SendInApp" value="true" checked="@Model.Rule.SendInApp" /> In app</label><label><input type="checkbox" name="SendEmail" value="true" checked="@Model.Rule.SendEmail" /> Email</label><label><input type="checkbox" name="SendTeams" value="true" checked="@Model.Rule.SendTeams" /> Teams</label><label><input type="checkbox" name="IsEnabled" value="true" checked="@Model.Rule.IsEnabled" /> Enabled</label></div>
+        <div class="dialog-actions"><button class="button" type="button" data-dialog-close>Cancel</button><button class="button primary" type="submit">Save rule</button></div>
+    </form>
+</dialog>

@@ -1,0 +1,204 @@
+@model DocumentTypeConfigurationViewModel
+@{
+    var type = Model.DocumentType;
+    ViewData["Title"] = type.Name;
+    string Active(string tab) => Model.ActiveTab == tab ? "is-active" : "";
+}
+
+<div class="page-heading request-detail-heading">
+    <div><p class="eyebrow">Document Type · @type.Key</p><h1>@type.Name</h1><p>@type.Description</p></div>
+    <div class="heading-actions"><span class="status @(type.IsActive ? "active" : "inactive")">@(type.IsActive ? "Active" : "Inactive")</span><a class="button" asp-action="Index">Back to Document Types</a></div>
+</div>
+
+<nav class="tab-list" aria-label="Document type configuration">
+    <a class="@Active("overview")" asp-action="Manage" asp-route-id="@type.Id" asp-route-tab="overview">Overview</a>
+    <a class="@Active("fields")" asp-action="Manage" asp-route-id="@type.Id" asp-route-tab="fields">Form Fields</a>
+    <a class="@Active("access")" asp-action="Manage" asp-route-id="@type.Id" asp-route-tab="access">Access</a>
+    <a class="@Active("notifications")" asp-action="Manage" asp-route-id="@type.Id" asp-route-tab="notifications">Notifications</a>
+    <a class="@Active("workflow")" asp-action="Manage" asp-route-id="@type.Id" asp-route-tab="workflow">Workflow</a>
+    <a class="@Active("requests")" asp-action="Manage" asp-route-id="@type.Id" asp-route-tab="requests">Requests</a>
+</nav>
+
+@if (Model.ActiveTab == "overview")
+{
+    <div class="configuration-grid">
+        <section class="panel form-panel">
+            <div class="panel-heading"><div><h2>Overview</h2><p>Stable identity and request-number settings.</p></div></div>
+            <form asp-action="UpdateOverview" asp-route-id="@type.Id" method="post" class="form-grid">
+                <div class="field"><label for="name">Name</label><input id="name" name="name" value="@type.Name" required maxlength="150" /></div>
+                <div class="field"><label for="key">Key</label><input id="key" name="key" value="@type.Key" required maxlength="80" /></div>
+                <div class="field"><label for="numberPrefix">Number prefix</label><input id="numberPrefix" name="numberPrefix" value="@type.NumberPrefix" required maxlength="8" /></div>
+                <div class="field full"><label for="description">Description</label><textarea id="description" name="description" rows="4" maxlength="500">@type.Description</textarea></div>
+                <div><button class="button primary" type="submit">Save overview</button></div>
+            </form>
+        </section>
+        <aside class="configuration-sidebar">
+            <section class="panel form-panel">
+                <h2>Availability</h2>
+                <p class="help">Deactivation blocks new requests and retains all workflow and evidence history.</p>
+                @if (type.IsActive)
+                {
+                    <form asp-action="Deactivate" asp-route-id="@type.Id" method="post"><button class="button" type="submit">Deactivate Document Type</button></form>
+                }
+                else
+                {
+                    <form asp-action="Reactivate" asp-route-id="@type.Id" method="post"><button class="button primary" type="submit">Reactivate Document Type</button></form>
+                }
+            </section>
+            <section class="panel form-panel danger-zone">
+                <h2>Permanent deletion</h2>
+                @if (Model.CanDelete)
+                {
+                    <p class="help">This unused configuration has no requests or published workflow history.</p>
+                    <button class="button danger" type="button" data-dialog-open="delete-document-type">Delete permanently</button>
+                }
+                else
+                {
+                    <p class="help">Deletion is blocked because operational or published history exists. Deactivate this document type instead.</p>
+                }
+            </section>
+        </aside>
+    </div>
+}
+
+@if (Model.ActiveTab == "fields")
+{
+    <section class="panel data-workspace">
+        <div class="panel-heading"><div><h2>Form Fields</h2><p>Configure the dynamic intake form in display order.</p></div><button class="button primary" type="button" data-dialog-open="add-field">+ Add field</button></div>
+        <div class="table-scroll">
+            <table class="data-table">
+                <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Usage</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+                <tbody>
+                @foreach (var field in Model.Fields)
+                {
+                    <tr>
+                        <td><strong>@field.Label</strong><small>@field.Key@if (!string.IsNullOrWhiteSpace(field.HelpText)){<text> · @field.HelpText</text>}</small></td>
+                        <td>@field.FieldType</td>
+                        <td>@(field.IsRequired ? "Yes" : "No")</td>
+                        <td>@(field.IsUsed ? "Used by requests" : "Unused")</td>
+                        <td class="table-actions">
+                            <form asp-action="MoveField" asp-route-id="@type.Id" asp-route-fieldId="@field.Id" method="post"><input type="hidden" name="direction" value="-1" /><button class="button small" type="submit" aria-label="Move @field.Label up">↑</button></form>
+                            <form asp-action="MoveField" asp-route-id="@type.Id" asp-route-fieldId="@field.Id" method="post"><input type="hidden" name="direction" value="1" /><button class="button small" type="submit" aria-label="Move @field.Label down">↓</button></form>
+                            <button class="button small" type="button" data-dialog-open="field-@field.Id">Edit</button>
+                            <form asp-action="RemoveField" asp-route-id="@type.Id" asp-route-fieldId="@field.Id" method="post"><button class="button small danger" type="submit" disabled="@field.IsUsed">Remove</button></form>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </section>
+    @foreach (var field in Model.Fields)
+    {
+        <partial name="_FieldDialog" model="@(new DocumentFieldDialogViewModel(type.Id, $"field-{field.Id}", "Edit field", field))" />
+    }
+    <partial name="_FieldDialog" model="@(new DocumentFieldDialogViewModel(type.Id, "add-field", "Add field", new DocumentFieldEditViewModel { FieldType = DocumentFieldType.ShortText }))" />
+}
+
+@if (Model.ActiveTab == "access")
+{
+    <section class="panel access-workspace">
+        <div class="panel-heading"><div><h2>Manage Access</h2><p>Assign scoped operational visibility. These roles do not grant global administration or approval authority.</p></div><button class="button primary" type="button" data-dialog-open="add-access">+ Add person</button></div>
+        <div class="access-groups">
+        @foreach (var role in Enum.GetValues<DocumentTypeAccessRole>())
+        {
+            <section>
+                <h3>@role</h3>
+                <p>@(role == DocumentTypeAccessRole.Administrator ? "Operational owner with full request visibility." : role == DocumentTypeAccessRole.Coordinator ? "Coordinates work and can view/download request documents." : "Read-only visibility for this document type.")</p>
+                @if (!Model.Access.Any(x => x.AccessRole == role))
+                {
+                    <div class="empty-state compact"><p>No @role.ToString().ToLowerInvariant() assignments.</p></div>
+                }
+                else
+                {
+                    <ul class="people-list">
+                    @foreach (var access in Model.Access.Where(x => x.AccessRole == role))
+                    {
+                        <li><span class="user-avatar">@string.Concat(access.UserName.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(x => x[0]))</span><div><strong>@access.UserName</strong><small>@access.UserEmail</small></div><form asp-action="RemoveAccess" asp-route-id="@type.Id" asp-route-accessId="@access.Id" method="post"><button class="button small danger" type="submit">Remove</button></form></li>
+                    }
+                    </ul>
+                }
+            </section>
+        }
+        </div>
+    </section>
+    <dialog class="sheet-dialog" id="add-access" aria-labelledby="add-access-title">
+        <form method="dialog" class="dialog-close"><button aria-label="Close">×</button></form>
+        <form asp-action="SaveAccess" asp-route-id="@type.Id" method="post" class="dialog-form">
+            <div><p class="eyebrow">Scoped access</p><h2 id="add-access-title">Add person</h2><p>Select an existing application user and an operational role.</p></div>
+            <div class="field"><label for="access-user">Person</label><select id="access-user" name="UserId" data-combobox><option value="">Select a person</option>@foreach (var user in Model.Users){<option value="@user.Value">@user.Text</option>}</select></div>
+            <div class="field"><label for="access-role">Role</label><select id="access-role" name="AccessRole" asp-items="Html.GetEnumSelectList<DocumentTypeAccessRole>()"></select></div>
+            <div class="dialog-actions"><button class="button" type="button" data-dialog-close>Cancel</button><button class="button primary" type="submit">Save access</button></div>
+        </form>
+    </dialog>
+}
+
+@if (Model.ActiveTab == "notifications")
+{
+    <section class="panel notification-rules">
+        <div class="panel-heading"><div><h2>Lifecycle Notifications</h2><p>Notify people about request events without adding approval stages or signatures.</p></div><button class="button primary" type="button" data-dialog-open="add-notification">+ Add rule</button></div>
+        @if (Model.Notifications.Count == 0)
+        {
+            <div class="empty-state"><h3>No lifecycle rules</h3><p>Approval-stage alerts continue to work independently in the Route Designer.</p></div>
+        }
+        else
+        {
+            <div class="rule-list">
+            @foreach (var rule in Model.Notifications)
+            {
+                <article class="rule-card">
+                    <div class="rule-event"><span class="event-icon">↗</span><div><strong>@rule.EventType</strong><small>@rule.RecipientType@if (!string.IsNullOrWhiteSpace(rule.StageKey)){<text> · @Model.WorkflowStages.FirstOrDefault(x => x.StageKey == rule.StageKey)?.Name</text>}</small></div></div>
+                    <div class="channel-summary">@if(rule.SendInApp){<span>In app</span>}@if(rule.SendEmail){<span>Email</span>}@if(rule.SendTeams){<span>Teams</span>}</div>
+                    <partial name="_StatusBadge" model="@(new StatusBadgeViewModel(rule.IsEnabled ? "Enabled" : "Disabled", rule.IsEnabled ? "success" : "neutral"))" />
+                    <div class="table-actions"><button class="button small" type="button" data-dialog-open="notification-@rule.Id">Edit</button><form asp-action="RemoveNotification" asp-route-id="@type.Id" asp-route-ruleId="@rule.Id" method="post"><button class="button small danger" type="submit">Disable</button></form></div>
+                </article>
+            }
+            </div>
+        }
+    </section>
+    @foreach (var rule in Model.Notifications)
+    {
+        <partial name="_NotificationRuleDialog" model="@(new NotificationRuleDialogViewModel(type.Id, $"notification-{rule.Id}", "Edit notification rule", rule, Model.Users, Model.WorkflowStages, Model.Fields))" />
+    }
+    <partial name="_NotificationRuleDialog" model="@(new NotificationRuleDialogViewModel(type.Id, "add-notification", "Add notification rule", new LifecycleNotificationRuleEditViewModel(), Model.Users, Model.WorkflowStages, Model.Fields))" />
+}
+
+@if (Model.ActiveTab == "workflow")
+{
+    <div class="configuration-grid">
+        <section class="panel">
+            <div class="panel-heading"><div><h2>Workflow</h2><p>Published versions govern new requests; drafts remain isolated until published.</p></div><a class="button primary" href="/route-designer?documentTypeId=@type.Id">Open Route Designer</a></div>
+            <div class="version-cards">
+                <article>
+                    <span class="status published">Published</span>
+                    @if(Model.PublishedVersion is null){<h3>No published route</h3><p>New requests remain unavailable until a valid draft is published.</p>}else{<h3>@Model.PublishedVersion.Name</h3><p>Version @Model.PublishedVersion.VersionNumber · @Model.PublishedVersion.Stages.Count stages · published @Model.PublishedVersion.PublishedAtUtc?.ToLocalTime().ToString("MMM d, yyyy")</p>}
+                </article>
+                <article>
+                    <span class="status draft">Draft</span>
+                    @if(Model.DraftVersion is null){<h3>No draft</h3><p>Create one in the Route Designer when changes are needed.</p>}else{<h3>@Model.DraftVersion.Name</h3><p>Version @Model.DraftVersion.VersionNumber · @Model.DraftVersion.Stages.Count configured stages</p>}
+                </article>
+            </div>
+        </section>
+        <aside class="notice"><strong>Governance:</strong> Only SystemAdmins can change or publish workflows. Scoped Document Type Administrators retain operational oversight only.</aside>
+    </div>
+}
+
+@if (Model.ActiveTab == "requests")
+{
+    <section class="panel data-workspace">
+        <div class="panel-heading"><div><h2>Requests</h2><p>Operational history for @type.Name.</p></div><a class="button" asp-controller="ManagedRequests" asp-action="Index" asp-route-documentTypeId="@type.Id">Open Managed Requests</a></div>
+        <partial name="_ManagedRequestsTable" model="@Model.Requests" />
+    </section>
+}
+
+@if (Model.CanDelete)
+{
+    <dialog class="confirm-dialog" id="delete-document-type" aria-labelledby="delete-title">
+        <form method="dialog" class="dialog-close"><button aria-label="Close">×</button></form>
+        <form asp-action="Delete" asp-route-id="@type.Id" method="post" class="dialog-form" data-confirm-form data-confirm-value="@type.Name">
+            <div><p class="eyebrow">Permanent action</p><h2 id="delete-title">Delete @type.Name?</h2><p>This removes only an unused configuration. Type <strong>@type.Name</strong> or <strong>DELETE</strong> to confirm.</p></div>
+            <div class="field"><label for="confirmation">Confirmation</label><input id="confirmation" name="confirmation" autocomplete="off" data-confirm-input /></div>
+            <div class="dialog-actions"><button class="button" type="button" data-dialog-close>Cancel</button><button class="button danger" type="submit" data-confirm-submit disabled>Delete permanently</button></div>
+        </form>
+    </dialog>
+}

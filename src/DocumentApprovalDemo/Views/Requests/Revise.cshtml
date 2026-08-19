@@ -41,6 +41,18 @@
         </div>
     }
     <div class="field"><label asp-for="ChangeSummary">What changed?</label><textarea asp-for="ChangeSummary" rows="3"></textarea><span asp-validation-for="ChangeSummary"></span></div>
-    <div class="field"><label asp-for="SupportingDocuments">Updated supporting documents</label><input asp-for="SupportingDocuments" type="file" multiple /><span asp-validation-for="SupportingDocuments"></span></div>
+    <div class="field">
+        <label asp-for="SupportingDocuments">Updated supporting documents</label>
+        <div class="upload-workspace" data-file-upload>
+            <label class="upload-dropzone">
+                <span class="upload-icon" aria-hidden="true">↑</span>
+                <strong>Drop updated documents here</strong>
+                <small>or browse from your device</small>
+                <input asp-for="SupportingDocuments" type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.txt" data-file-input />
+            </label>
+            <div class="upload-table" data-file-list hidden></div>
+        </div>
+        <span asp-validation-for="SupportingDocuments"></span>
+    </div>
     <div class="form-actions"><a class="button" asp-action="Details" asp-route-id="@Model.RequestId">Cancel</a><button class="button primary" type="submit">Submit new revision</button></div>
 </form>

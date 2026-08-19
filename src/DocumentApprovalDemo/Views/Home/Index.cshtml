@@ -58,6 +58,22 @@
 
 <partial name="_ApprovalQueue" model="@Model.ApprovalQueue" />
 
+@if (Model.ManagedDocumentTypes.Count > 0)
+{
+    <section class="managed-types" aria-labelledby="managed-types-title">
+        <div class="section-heading"><div><p class="eyebrow">Operational oversight</p><h2 id="managed-types-title">Document Types I Manage</h2></div><a asp-controller="ManagedRequests" asp-action="Index">View managed requests</a></div>
+        <div class="managed-type-grid">
+        @foreach (var item in Model.ManagedDocumentTypes)
+        {
+            <a class="managed-type-card" asp-controller="ManagedRequests" asp-action="Index" asp-route-documentTypeId="@item.DocumentTypeId">
+                <strong>@item.Name</strong>
+                <dl><div><dt>Active</dt><dd>@item.Active</dd></div><div><dt>Needs attention</dt><dd>@item.NeedsAttention</dd></div><div><dt>Completed recently</dt><dd>@item.CompletedRecently</dd></div></dl>
+            </a>
+        }
+        </div>
+    </section>
+}
+
 <div class="dashboard-secondary-grid">
     <section class="panel recent-requests" aria-labelledby="recent-requests-title">
         <div class="panel-heading">

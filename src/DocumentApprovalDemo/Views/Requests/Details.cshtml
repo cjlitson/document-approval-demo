@@ -7,6 +7,7 @@
         .OrderBy(x => x.Sequence)
         .ToList();
     var isRequester = request.RequesterId.ToString() == User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    var firstDocument = Model.Documents.FirstOrDefault();
 }
 
 <div class="page-heading request-detail-heading">
@@ -21,87 +22,153 @@
         {
             <a class="button primary" asp-action="Revise" asp-route-id="@request.Id">Revise and resubmit</a>
         }
-        @if (request.Status == RequestStatus.Approved)
+        @if (Model.PackageAvailable)
         {
-            <a class="button primary" asp-action="SignedPackage" asp-route-id="@request.Id">
+            <a class="button" asp-action="ApprovalRecordPreview" asp-route-id="@request.Id" target="_blank" rel="noreferrer">View Approval Record</a>
+            <a class="button" asp-action="ApprovalRecordDownload" asp-route-id="@request.Id">Download Approval Record</a>
+            <a class="button primary" asp-action="Package" asp-route-id="@request.Id">
                 <svg class="button-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v10M6 9l4 4 4-4M4 16h12" /></svg>
-                Download signed package
+                Download Package
             </a>
         }
     </div>
 </div>
 
-<div class="detail-grid request-detail-grid">
-    <div>
-        <section class="panel detail-list">
-            <div class="panel-heading inset-heading">
-                <div><h2>Request information</h2><p>Current revision data used by the workflow.</p></div>
-            </div>
-            <dl>
-                <div><dt>Requester</dt><dd>@request.Requester.FullName<br /><small>@request.Requester.Email</small></dd></div>
-                <div><dt>Confirmed manager</dt><dd>@request.ConfirmedManager.FullName<br /><small>@request.ManagerSource</small></dd></div>
-                @foreach (var field in currentFields)
-                {
-                    <div>
-                        <dt>@field.Label</dt>
-                        <dd>
-                            @if (field.FieldType == DocumentFieldType.Url && !string.IsNullOrWhiteSpace(field.Value))
-                            {
-                                <a href="@field.Value" rel="noreferrer" target="_blank">Open link <span aria-hidden="true">↗</span></a>
-                            }
-                            else if (field.FieldType == DocumentFieldType.Currency && decimal.TryParse(field.Value, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var amount))
-                            {
-                                @amount.ToString("C")
-                            }
-                            else
-                            {
-                                <span class="preserve">@(field.DisplayValue ?? field.Value)</span>
-                            }
-                        </dd>
-                    </div>
-                }
-            </dl>
-        </section>
+<div class="request-tabs" data-tabs>
+    <div class="tab-list" role="tablist" aria-label="Request details">
+        <button type="button" role="tab" aria-selected="true" aria-controls="request-overview" id="tab-overview" data-tab="request-overview">Overview</button>
+        <button type="button" role="tab" aria-selected="false" aria-controls="request-workflow" id="tab-workflow" data-tab="request-workflow">Workflow</button>
+        <button type="button" role="tab" aria-selected="false" aria-controls="request-documents" id="tab-documents" data-tab="request-documents">Documents <span>@Model.Documents.Count</span></button>
+        <button type="button" role="tab" aria-selected="false" aria-controls="request-activity" id="tab-activity" data-tab="request-activity">Activity</button>
+    </div>
 
-        <section class="panel">
-            <div class="panel-heading">
-                <div><h2>Supporting documents</h2><p>Original files retained with each revision.</p></div>
+    <section class="tab-panel" role="tabpanel" id="request-overview" aria-labelledby="tab-overview">
+        <div class="detail-grid request-detail-grid">
+            <section class="panel detail-list">
+                <div class="panel-heading inset-heading"><div><h2>Request information</h2><p>Current revision data used by the workflow.</p></div></div>
+                <dl>
+                    <div><dt>Status</dt><dd><partial name="_StatusBadge" model="@StatusBadgeViewModel.For(request.Status)" /></dd></div>
+                    <div><dt>Document type</dt><dd>@request.DocumentType.Name<br /><small>@request.DocumentType.Key</small></dd></div>
+                    <div><dt>Requester</dt><dd>@request.Requester.FullName<br /><small>@request.Requester.Email</small></dd></div>
+                    <div><dt>Confirmed manager</dt><dd>@request.ConfirmedManager.FullName<br /><small>@request.ManagerSource</small></dd></div>
+                    <div><dt>Created</dt><dd>@request.CreatedAtUtc.ToLocalTime().ToString("MMM d, yyyy 'at' h:mm tt")</dd></div>
+                    <div><dt>Route version</dt><dd>@(request.RouteVersion is null ? "Not assigned" : $"{request.RouteVersion.Name} · v{request.RouteVersion.VersionNumber}")</dd></div>
+                    @foreach (var field in currentFields)
+                    {
+                        <div>
+                            <dt>@field.Label</dt>
+                            <dd>
+                                @if (field.FieldType == DocumentFieldType.Url && !string.IsNullOrWhiteSpace(field.Value))
+                                {
+                                    <a href="@field.Value" rel="noreferrer" target="_blank">Open link <span aria-hidden="true">↗</span></a>
+                                }
+                                else if (field.FieldType == DocumentFieldType.Currency && decimal.TryParse(field.Value, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var amount))
+                                {
+                                    @amount.ToString("C")
+                                }
+                                else if (field.FieldType == DocumentFieldType.Boolean && bool.TryParse(field.Value, out var boolean))
+                                {
+                                    @(boolean ? "Yes" : "No")
+                                }
+                                else
+                                {
+                                    <span class="preserve">@(field.DisplayValue ?? field.Value)</span>
+                                }
+                            </dd>
+                        </div>
+                    }
+                </dl>
+            </section>
+            <aside>
+                <section class="panel">
+                    <div class="panel-heading"><div><h2>Revision history</h2><p>Prior submissions and restart evidence.</p></div></div>
+                    <ul class="revision-list">
+                        @foreach (var revision in request.Revisions.OrderByDescending(x => x.RevisionNumber))
+                        {
+                            <li><div><strong>Revision @revision.RevisionNumber</strong><span class="revision-status">@revision.Status</span></div><small>@revision.SubmittedAtUtc.ToLocalTime().ToString("MMM d, yyyy 'at' h:mm tt")</small><p>@revision.ChangeSummary</p></li>
+                        }
+                    </ul>
+                </section>
+            </aside>
+        </div>
+    </section>
+
+    <section class="tab-panel" role="tabpanel" id="request-workflow" aria-labelledby="tab-workflow" hidden>
+        <div class="detail-grid request-detail-grid">
+            <div>
+                <partial name="_WorkflowProgress" model="@Model.WorkflowProgress" />
+                <partial name="_RoutingHistory" model="@Model.RoutingHistory" />
             </div>
-            @if (request.Attachments.Count == 0)
+            <aside class="notice"><strong>Informational workflow:</strong> The progress stepper reflects submitted route evidence. It cannot be used to change request state.</aside>
+        </div>
+    </section>
+
+    <section class="tab-panel" role="tabpanel" id="request-documents" aria-labelledby="tab-documents" hidden>
+        <section class="panel document-reader" data-document-reader>
+            <div class="document-list-pane">
+                <div class="panel-heading"><div><h2>Documents</h2><p>Approval evidence and originals by revision.</p></div></div>
+                @if (Model.Documents.Count == 0)
+                {
+                    <div class="empty-state compact"><p>No documents are available.</p></div>
+                }
+                else
+                {
+                    <ul class="document-selector">
+                    @foreach (var document in Model.Documents)
+                    {
+                        <li class="@(document == firstDocument ? "is-selected" : "")">
+                            <button type="button"
+                                    data-document-select
+                                    data-document-name="@document.Name"
+                                    data-preview-url="@document.PreviewUrl"
+                                    data-download-url="@document.DownloadUrl"
+                                    data-preview-message="@document.PreviewUnavailableReason"
+                                    aria-pressed="@(document == firstDocument ? "true" : "false")">
+                                <span class="file-icon" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="M6 2h5l4 4v12H6z" /><path d="M11 2v4h4" /></svg></span>
+                                <span><strong>@document.Name</strong><small>@document.TypeLabel@if(document.Revision.HasValue){<text> · Revision @document.Revision</text>}@if(document.SizeBytes.HasValue){<text> · @((document.SizeBytes.Value / 1024d).ToString("N1")) KB</text>}</small></span>
+                            </button>
+                            <span class="document-actions">@if(document.CanPreview){<a href="@document.PreviewUrl" target="_blank" rel="noreferrer">View</a>}<a href="@document.DownloadUrl">Download</a></span>
+                        </li>
+                    }
+                    </ul>
+                }
+            </div>
+            <div class="document-viewer-pane">
+                <header><div><span>Selected document</span><strong data-document-title>@(firstDocument?.Name ?? "No document selected")</strong></div>@if(firstDocument is not null){<a class="button small" href="@firstDocument.DownloadUrl" data-document-download>Download</a>}</header>
+                @if (firstDocument is null)
+                {
+                    <div class="viewer-unavailable"><p>Select a document to preview.</p></div>
+                }
+                else if (firstDocument.CanPreview)
+                {
+                    <iframe src="@firstDocument.PreviewUrl" title="Preview of @firstDocument.Name" data-document-frame></iframe>
+                    <div class="viewer-unavailable" data-document-unavailable hidden><p></p><a class="button" href="@firstDocument.DownloadUrl">Download</a></div>
+                }
+                else
+                {
+                    <iframe title="Document preview" data-document-frame hidden></iframe>
+                    <div class="viewer-unavailable" data-document-unavailable><p>@firstDocument.PreviewUnavailableReason</p><a class="button" href="@firstDocument.DownloadUrl">Download</a></div>
+                }
+            </div>
+        </section>
+    </section>
+
+    <section class="tab-panel" role="tabpanel" id="request-activity" aria-labelledby="tab-activity" hidden>
+        <section class="panel activity-panel">
+            <div class="panel-heading"><div><h2>Activity</h2><p>Security-relevant request and workflow events.</p></div></div>
+            @if (Model.Activity.Count == 0)
             {
-                <div class="empty-state compact"><p>No supporting documents are attached.</p></div>
+                <div class="empty-state compact"><p>No activity has been recorded.</p></div>
             }
             else
             {
-                <ul class="file-list">
-                    @foreach (var file in request.Attachments.OrderByDescending(x => x.RevisionNumber).ThenBy(x => x.OriginalFileName))
-                    {
-                        <li>
-                            <span class="file-icon" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="M6 2h5l4 4v12H6z" /><path d="M11 2v4h4" /></svg></span>
-                            <div><strong>@file.OriginalFileName</strong><small>Revision @file.RevisionNumber · @((file.SizeBytes / 1024d).ToString("N1")) KB</small></div>
-                            <a asp-action="Attachment" asp-route-requestId="@request.Id" asp-route-attachmentId="@file.Id">Download</a>
-                        </li>
-                    }
-                </ul>
+                <ol class="activity-list">
+                @foreach (var item in Model.Activity)
+                {
+                    <li><span class="activity-marker neutral"></span><div><strong>@item.EventType</strong><p>@item.Details</p><small>@item.ActorName · @item.OccurredAtUtc.ToLocalTime().ToString("MMM d, yyyy 'at' h:mm tt")</small></div></li>
+                }
+                </ol>
             }
         </section>
-    </div>
-
-    <aside>
-        <partial name="_RoutingHistory" model="@Model.RoutingHistory" />
-
-        <section class="panel">
-            <div class="panel-heading"><div><h2>Revision history</h2><p>Prior submissions and restart evidence.</p></div></div>
-            <ul class="revision-list">
-                @foreach (var revision in request.Revisions.OrderByDescending(x => x.RevisionNumber))
-                {
-                    <li>
-                        <div><strong>Revision @revision.RevisionNumber</strong><span class="revision-status">@revision.Status</span></div>
-                        <small>@revision.SubmittedAtUtc.ToLocalTime().ToString("MMM d, yyyy 'at' h:mm tt")</small>
-                        <p>@revision.ChangeSummary</p>
-                    </li>
-                }
-            </ul>
-        </section>
-    </aside>
+    </section>
 </div>

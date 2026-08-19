@@ -12,6 +12,7 @@
         .Select(x => char.ToUpperInvariant(x[0])));
     var unreadAlerts = 0;
     var pendingApprovals = 0;
+    var hasManagedDocumentTypes = false;
 
     if (isAuthenticated && Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var layoutUserId))
     {
@@ -19,6 +20,8 @@
             .CountAsync(x => x.UserId == layoutUserId && !x.IsRead && x.Status != NotificationStatus.Cancelled);
         pendingApprovals = await LayoutDb.ApprovalInstances.AsNoTracking()
             .CountAsync(x => x.ApproverId == layoutUserId && x.Status == ApprovalStatus.Pending);
+        hasManagedDocumentTypes = User.IsInRole(Roles.SystemAdmin) || await LayoutDb.DocumentTypeAccess.AsNoTracking()
+            .AnyAsync(x => x.UserId == layoutUserId && x.IsActive);
     }
 
     bool IsActive(string prefix, bool exact = false) => exact
@@ -73,6 +76,13 @@
                         <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M8 13h8M8 17h5" /></svg>
                         <span class="nav-label">My requests</span>
                     </a>
+                    @if (hasManagedDocumentTypes)
+                    {
+                        <a class="nav-link @(IsActive("/managed-requests") ? "is-active" : "")" asp-controller="ManagedRequests" asp-action="Index" aria-current="@(IsActive("/managed-requests") ? "page" : null)" title="Managed requests">
+                            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4z" /><path d="M8 9h8M8 13h5" /><circle cx="18" cy="17" r="3" /></svg>
+                            <span class="nav-label">Managed requests</span>
+                        </a>
+                    }
                     @if (User.IsInRole(Roles.SystemAdmin))
                     {
                         <a class="nav-link @(IsActive("/admin/requests") ? "is-active" : "")" asp-controller="Administration" asp-action="Requests" aria-current="@(IsActive("/admin/requests") ? "page" : null)" title="All requests">
@@ -98,7 +108,7 @@
                             <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="2" /><circle cx="18" cy="18" r="2" /><path d="M8 6h3a4 4 0 0 1 4 4v4M6 8v6a4 4 0 0 0 4 4h6" /></svg>
                             <span class="nav-label">Workflows</span>
                         </a>
-                        <a class="nav-link @(IsActive("/admin/document-types") ? "is-active" : "")" asp-controller="Administration" asp-action="DocumentTypes" aria-current="@(IsActive("/admin/document-types") ? "page" : null)" title="Document types">
+                        <a class="nav-link @(IsActive("/admin/document-types") ? "is-active" : "")" asp-controller="DocumentTypes" asp-action="Index" aria-current="@(IsActive("/admin/document-types") ? "page" : null)" title="Document types">
                             <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M8 13h8M8 17h5" /></svg>
                             <span class="nav-label">Document types</span>
                         </a>

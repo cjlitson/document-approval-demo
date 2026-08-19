@@ -9,11 +9,15 @@ using Microsoft.EntityFrameworkCore;
 namespace DocumentApprovalDemo.Controllers;
 
 [Authorize]
-public sealed class HomeController(AppDbContext db, ICurrentUserService currentUser) : Controller
+public sealed class HomeController(
+    AppDbContext db,
+    ICurrentUserService currentUser,
+    IDocumentAuthorizationService authorization) : Controller
 {
     public async Task<IActionResult> Index(CancellationToken cancellationToken)
     {
         var userId = currentUser.UserId!.Value;
+        var dashboardUser = await currentUser.GetAsync(cancellationToken) ?? throw new UnauthorizedAccessException();
         var myRequests = await db.Requests.AsNoTracking()
             .Include(x => x.DocumentType)
             .Include(x => x.Approvals)
@@ -26,8 +30,17 @@ public sealed class HomeController(AppDbContext db, ICurrentUserService currentU
             .Where(x => x.ApproverId == userId && x.Status == ApprovalStatus.Pending)
             .ToListAsync(cancellationToken);
 
+        var managedTypeIds = await authorization.GetOverseenDocumentTypeIdsAsync(
+            userId, dashboardUser.IsInRole(Roles.SystemAdmin), cancellationToken);
+        List<ApprovalRequest> managedRequests = managedTypeIds.Count == 0
+            ? []
+            : await db.Requests.AsNoTracking().Include(x => x.DocumentType)
+                .Where(x => managedTypeIds.Contains(x.DocumentTypeId))
+                .ToListAsync(cancellationToken);
         var accessibleRequests = await db.Requests.AsNoTracking()
-            .Where(x => x.RequesterId == userId || x.Approvals.Any(approval => approval.ApproverId == userId))
+            .Where(x => x.RequesterId == userId ||
+                        x.Approvals.Any(approval => approval.ApproverId == userId) ||
+                        managedTypeIds.Contains(x.DocumentTypeId))
             .Select(x => new { x.Id, x.RequestNumber })
             .ToListAsync(cancellationToken);
         var requestLookup = accessibleRequests.ToDictionary(x => x.Id);
@@ -98,6 +111,20 @@ public sealed class HomeController(AppDbContext db, ICurrentUserService currentU
                     ActorName = actorLookup.GetValueOrDefault(x.ActorUserId, "System"),
                     OccurredAtUtc = x.OccurredAtUtc
                 })
+                .ToList(),
+            ManagedDocumentTypes = managedRequests
+                .GroupBy(x => new { x.DocumentTypeId, x.DocumentType.Name })
+                .OrderBy(x => x.Key.Name)
+                .Take(4)
+                .Select(x => new ManagedDocumentTypeSummaryViewModel(
+                    x.Key.DocumentTypeId,
+                    x.Key.Name,
+                    x.Count(request => request.Status == RequestStatus.InApproval),
+                    x.Count(request => request.Status == RequestStatus.InApproval),
+                    x.Count(request => request.Status == RequestStatus.Rejected),
+                    x.Count(request => request.Status == RequestStatus.Approved &&
+                                       request.CompletedAtUtc.HasValue &&
+                                       request.CompletedAtUtc.Value >= completedCutoff)))
                 .ToList()
         };
         return View(model);

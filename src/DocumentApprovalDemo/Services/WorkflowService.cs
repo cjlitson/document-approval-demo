@@ -13,11 +13,25 @@ public interface IWorkflowService
     Task RestartAsync(ApprovalRequest request, ApplicationUser actor, string changeSummary, CancellationToken cancellationToken = default);
 }
 
-public sealed class WorkflowService(
-    AppDbContext db,
-    IRoutingService routing,
-    INotificationService notifications) : IWorkflowService
+public sealed class WorkflowService : IWorkflowService
 {
+    private readonly AppDbContext db;
+    private readonly IRoutingService routing;
+    private readonly INotificationService notifications;
+    private readonly ILifecycleNotificationService lifecycleNotifications;
+
+    public WorkflowService(
+        AppDbContext db,
+        IRoutingService routing,
+        INotificationService notifications,
+        ILifecycleNotificationService? lifecycleNotifications = null)
+    {
+        this.db = db;
+        this.routing = routing;
+        this.notifications = notifications;
+        this.lifecycleNotifications = lifecycleNotifications ?? new NullLifecycleNotificationService();
+    }
+
     public async Task StartAsync(ApprovalRequest request, ApplicationUser actor, CancellationToken cancellationToken = default)
     {
         var route = await routing.GetPublishedRouteAsync(request.DocumentTypeId, cancellationToken);
@@ -55,6 +69,12 @@ public sealed class WorkflowService(
         var pendingStage = stages.Single(x => x.Id == pending.RouteStageId);
         var pendingApprover = await db.Users.SingleAsync(x => x.Id == pending.ApproverId, cancellationToken);
         await notifications.QueueStageAlertsAsync(pendingApprover, request, pending, pendingStage, cancellationToken);
+        await lifecycleNotifications.QueueAsync(
+            LifecycleNotificationEvent.RequestSubmitted,
+            request,
+            currentApproval: pending,
+            cancellationToken: cancellationToken);
+        await lifecycleNotifications.QueueAsync(LifecycleNotificationEvent.StageStarted, request, pendingStage, pending, cancellationToken);
         db.AuditEvents.Add(Audit(request.Id, actor.Id, "RequestSubmitted",
             $"Revision {request.CurrentRevisionNumber} submitted with {request.DocumentType.Name} route version {route.VersionNumber}."));
         await db.SaveChangesAsync(cancellationToken);
@@ -65,6 +85,7 @@ public sealed class WorkflowService(
         var approval = await db.ApprovalInstances
             .Include(x => x.Request).ThenInclude(x => x.Requester)
             .Include(x => x.Request).ThenInclude(x => x.DocumentType)
+            .Include(x => x.Request).ThenInclude(x => x.FieldValues)
             .Include(x => x.Approver)
             .SingleOrDefaultAsync(x => x.Id == approvalId, cancellationToken);
         if (approval is null) return new(false, "Approval was not found.");
@@ -97,6 +118,12 @@ public sealed class WorkflowService(
         db.ApprovalDecisions.Add(approval.Decision);
         db.AuditEvents.Add(Audit(approval.RequestId, actorId, "ApprovalDecision",
             $"{approval.StageName} {decision} for revision {approval.RevisionNumber}."));
+        await lifecycleNotifications.QueueAsync(
+            LifecycleNotificationEvent.StageCompleted,
+            approval.Request,
+            stage,
+            approval,
+            cancellationToken);
 
         if (decision == DecisionType.Reject)
         {
@@ -108,6 +135,11 @@ public sealed class WorkflowService(
             var revision = await db.RequestRevisions.SingleAsync(x => x.RequestId == approval.RequestId && x.RevisionNumber == approval.RevisionNumber, cancellationToken);
             revision.Status = RevisionStatus.Rejected;
             await notifications.QueueRequestOutcomeAsync(approval.Request.Requester, approval.Request, approval, stage, "Rejected", cancellationToken);
+            await lifecycleNotifications.QueueAsync(
+                LifecycleNotificationEvent.RequestRejected,
+                approval.Request,
+                currentApproval: approval,
+                cancellationToken: cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
             return new(true);
         }
@@ -124,6 +156,12 @@ public sealed class WorkflowService(
             var nextStage = await db.RouteStages.Include(x => x.AlertPolicies)
                 .SingleAsync(x => x.Id == next.RouteStageId, cancellationToken);
             await notifications.QueueStageAlertsAsync(nextApprover, approval.Request, next, nextStage, cancellationToken);
+            await lifecycleNotifications.QueueAsync(
+                LifecycleNotificationEvent.StageStarted,
+                approval.Request,
+                nextStage,
+                next,
+                cancellationToken);
         }
         else
         {
@@ -131,8 +169,13 @@ public sealed class WorkflowService(
             approval.Request.CompletedAtUtc = now;
             var revision = await db.RequestRevisions.SingleAsync(x => x.RequestId == approval.RequestId && x.RevisionNumber == approval.RevisionNumber, cancellationToken);
             revision.Status = RevisionStatus.Approved;
-            db.AuditEvents.Add(Audit(approval.RequestId, actorId, "RequestApproved", "All required stages approved; signed package is available."));
+            db.AuditEvents.Add(Audit(approval.RequestId, actorId, "RequestApproved", "All required stages approved; the Approval Record and document package are available."));
             await notifications.QueueRequestOutcomeAsync(approval.Request.Requester, approval.Request, approval, stage, "Approved", cancellationToken);
+            await lifecycleNotifications.QueueAsync(
+                LifecycleNotificationEvent.RequestCompleted,
+                approval.Request,
+                currentApproval: approval,
+                cancellationToken: cancellationToken);
         }
 
         await db.SaveChangesAsync(cancellationToken);

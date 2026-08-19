@@ -12,7 +12,7 @@
     <article class="metric accent"><span>Delivered</span><strong>@Model.DeliveredCount</strong><small>Simulated in this prototype</small></article>
     <article class="metric"><span>Cancelled</span><strong>@Model.CancelledCount</strong><small>Stopped when a stage completed</small></article>
 </div>
-<section class="notice"><strong>Production boundary:</strong> the same outbox records would be delivered through Microsoft Graph or another approved provider. Approve/reject remains inside the authenticated application because every stage requires a typed signature.</section>
+<section class="notice"><strong>Production boundary:</strong> the same outbox records would be delivered through Microsoft Graph or another approved provider. Approval alerts can lead to a signed decision; lifecycle notifications are informational and never create an approval or signature requirement.</section>
 <section class="panel">
 @if (Model.Notifications.Count == 0)
 {
@@ -24,7 +24,7 @@ else
     @foreach (var notification in Model.Notifications)
     {
         <tr class="@(notification.IsRead ? "" : "unread-row")">
-            <td><strong>@notification.EventType</strong><small>@notification.Request?.RequestNumber</small></td>
+            <td><strong>@(notification.LifecycleEventType?.ToString() ?? notification.EventType.ToString())</strong><small>@(notification.LifecycleEventType.HasValue ? "Lifecycle notification" : "Approval alert") · @notification.Request?.RequestNumber</small></td>
             <td><span class="channel @notification.Channel.ToString().ToLowerInvariant()">@notification.Channel</span></td>
             <td><strong>@notification.Subject</strong><small>@notification.Body</small></td>
             <td>@notification.DueAtUtc.ToLocalTime().ToString("g")</td>

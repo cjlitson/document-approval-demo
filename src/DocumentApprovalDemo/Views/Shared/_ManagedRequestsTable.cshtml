@@ -1,0 +1,27 @@
+@model IReadOnlyList<ManagedRequestRowViewModel>
+@if (Model.Count == 0)
+{
+    <div class="empty-state compact"><p>No requests match this view.</p></div>
+}
+else
+{
+    <div class="table-scroll">
+        <table class="data-table">
+            <thead><tr><th>Request</th><th>Document type</th><th>Requester</th><th>Current step</th><th>Age</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+            @foreach (var item in Model)
+            {
+                <tr class="@(item.NeedsAttention ? "needs-attention" : "")">
+                    <td><strong>@item.RequestNumber</strong><small>@item.Title</small></td>
+                    <td>@item.DocumentTypeName</td>
+                    <td>@item.RequesterName<small>@item.CreatedAtUtc.ToLocalTime().ToString("MMM d, yyyy")</small></td>
+                    <td>@item.CurrentStep</td>
+                    <td>@item.AgeDays day@(item.AgeDays == 1 ? "" : "s")</td>
+                    <td><partial name="_StatusBadge" model="@StatusBadgeViewModel.For(item.Status)" /></td>
+                    <td><a class="button small" asp-controller="Requests" asp-action="Details" asp-route-id="@item.Id">Open</a></td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+}
