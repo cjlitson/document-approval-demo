@@ -13,12 +13,34 @@ A .NET 10 demonstration of a reusable document-routing and approval platform. AS
 - Attachments support drag/drop, multiple files, a pre-submit file table, server-side size/type validation, and revision-aware retention.
 - Authorized users can securely preview PDF, PNG, JPEG, and text files in the application and download originals individually. Office documents remain download-only in this pass.
 - Final approval exposes a professionally generated Approval Record PDF and a ZIP package containing that record, every attachment from every revision, and a JSON manifest with SHA-256 hashes.
-- Existing route versioning, conditional routing, adopted signatures, revision restarts, stage alerts, and outbox delivery behavior remain intact.
+- Route Designer V2 presents an explicitly sequential visual canvas, focused stage editor, pointer drag/reorder plus keyboard controls, insertion points, responsive condition builder, and publish-readiness feedback.
+- Condition Engine V2 stores nested AND/OR groups, typed rules, and relational operands. Runtime routing and the explainable simulator use the same evaluator.
+- Publication is a deliberate review flow with server-side validation and a semantic comparison to the current published version. Published versions remain immutable and existing requests remain version-bound.
+- Existing adopted signatures, revision restarts, stage alerts, lifecycle notifications, and outbox delivery behavior remain intact.
 
 Two seeded workflows demonstrate reuse:
 
 - **Purchase Request:** Manager Review → conditional Executive Review when `amount > 1000` → Financial Control Review.
-- **Policy Approval:** Owner Manager Review → conditional Compliance Review when `risk_level = High` → Records Approval assigned from a person field.
+- **Policy Approval:** Owner Manager Review → conditional Compliance Review when `risk_level = High OR (department = Executive AND effective_date is in the next 30 days)` → Records Approval assigned from a person field.
+
+## Route Designer V2 and condition semantics
+
+Each conditional stage owns one relational root `RouteConditionGroup`. Groups combine rule and child-group results with `And` or `Or`, may nest to five levels, and cannot be empty at publication. `StableGroupKey` and `StableRuleKey` are retained across route-version cloning along with `StageKey`; database IDs are replaced for each version.
+
+Operators are limited by field type:
+
+| Field type | Operators |
+|---|---|
+| Text / URL | equals, does not equal, contains, does not contain, starts with, ends with, empty, not empty |
+| Currency | equals, does not equal, greater/greater-or-equal, less/less-or-equal, inclusive between, empty, not empty |
+| Date | equals, does not equal, before, after, inclusive between, in last/next days, empty, not empty |
+| Choice | equals, does not equal, in, not in, empty, not empty |
+| Boolean | equals, does not equal |
+| User | equals, does not equal, empty, not empty |
+
+Persisted numbers use invariant parsing, dates use `DateOnly`, text/choice comparisons are case-insensitive, booleans are normalized `true`/`false`, User equality uses stable IDs, and blank/missing values share one empty definition. `Between` includes both boundaries; `In`/`NotIn` use one relational operand row per value.
+
+The designer simulator accepts built-in title/department plus every dynamic field, predicts stage inclusion and assignee resolution, and renders the evaluator’s nested rule/group explanation. This pass intentionally does **not** implement graph execution, parallel routing, or multiple simultaneous approvers: applicable approval instances are still activated one at a time in sequence.
 
 ## Authorization model
 
@@ -91,7 +113,7 @@ The manifest includes request/package metadata and each attachment’s original 
 2. Confirm the startup project is `DocumentApprovalDemo`.
 3. Build the solution, then press **F5**.
 4. Trust the ASP.NET Core development certificate if prompted.
-5. The first run creates `src/DocumentApprovalDemo/App_Data/document-approval-v3-demo.db` and seeds demo users, Document Types, routes, access, and notification rules.
+5. The first run creates `src/DocumentApprovalDemo/App_Data/document-approval-v4-demo.db` and seeds demo users, Document Types, routes, access, and notification rules.
 
 Command-line equivalent:
 
@@ -104,12 +126,12 @@ Prerequisite: the .NET 10 SDK.
 
 ### Prototype database note
 
-The application still uses `EnsureCreated` rather than migrations. This domain change therefore moves the default SQLite filename from `document-approval-v2-demo.db` to `document-approval-v3-demo.db`; an existing v2 file is left untouched instead of being silently destroyed or opened with an incompatible schema.
+The application still uses `EnsureCreated` rather than migrations. The relational condition-tree schema moves the default SQLite filename from `document-approval-v3-demo.db` to `document-approval-v4-demo.db`; the v3 file is left untouched instead of being silently destroyed or opened with an incompatible schema.
 
 To reset only the current prototype data, stop the app, optionally back up, and delete:
 
 ```text
-src/DocumentApprovalDemo/App_Data/document-approval-v3-demo.db
+src/DocumentApprovalDemo/App_Data/document-approval-v4-demo.db
 ```
 
 The next run recreates and reseeds it. If a custom connection string points at an older prototype file, point it at a new file or explicitly back up and reset that database. Production must replace `EnsureCreated` with reviewed EF Core migrations.
@@ -118,7 +140,7 @@ Default configuration:
 
 ```json
 "ConnectionStrings": {
-  "ApprovalDatabase": "Data Source=App_Data/document-approval-v3-demo.db"
+  "ApprovalDatabase": "Data Source=App_Data/document-approval-v4-demo.db"
 },
 "Database": {
   "Provider": "Sqlite"
@@ -130,12 +152,13 @@ For SQL Server, set `Database:Provider` to `SqlServer` and replace the connectio
 ## Suggested demonstration
 
 1. Sign in as **Alex Admin**. Open **Document types → Purchase Request** to review fields, Taylor/Jordan access, the completion rule, route state, and request history.
-2. Optionally create a new Document Type. The wizard creates a safe draft; use **Open Route Designer** to add stages and publish it.
-3. Sign in as **Avery Employee** and submit a Purchase Request with PDF, image, and Office attachments. An amount above `$1,000` includes Executive Review; exactly `$1,000` skips it because the seeded operator is `GreaterThan`.
-4. Sign in as **Taylor Purchasing**. Taylor is a requester, not a SystemAdmin or approver, but **Managed Requests** exposes the assigned Purchase Request and its documents.
-5. Complete approvals as **Morgan Manager**, **Pat President** when applicable, and **Finley Finance**, typing each authenticated full name.
-6. Return as Taylor. The completion notification states that operational follow-up is ready and requires no signature. Open the completed request to preview supported files, download originals, view/download the Approval Record, and download the final ZIP.
-7. Confirm Taylor cannot see a Policy Approval through scoped access.
+2. Open **Route Designer → Purchase Request**, create a draft, select Executive Review, and build `Amount > 1000 AND (Department = Operations OR Department = Executive)`. Reorder stages by drag and by the accessible arrow controls.
+3. In the simulator, enter Amount `4250` and Department `Operations`, then `Clinical`; inspect the included/skipped result, nested explanation, and assignee. Review publish readiness and the semantic version diff before confirming publication.
+4. Sign in as **Avery Employee** and submit a Purchase Request with PDF, image, and Office attachments. An amount above `$1,000` includes Executive Review; exactly `$1,000` skips it because the seeded operator is `GreaterThan`.
+5. Sign in as **Taylor Purchasing**. Taylor is a requester, not a SystemAdmin or approver, but **Managed Requests** exposes the assigned Purchase Request and its documents.
+6. Complete approvals as **Morgan Manager**, **Pat President** when applicable, and **Finley Finance**, typing each authenticated full name.
+7. Return as Taylor. The completion notification states that operational follow-up is ready and requires no signature. Open the completed request to preview supported files, download originals, view/download the Approval Record, and download the final ZIP.
+8. Confirm Taylor cannot see a Policy Approval through scoped access.
 
 ## Production boundaries
 
@@ -151,4 +174,4 @@ See [Architecture](docs/architecture.md) and [Production roadmap](docs/productio
 dotnet test DocumentApprovalDemo.sln
 ```
 
-The suite covers scoped access isolation, SystemAdmin visibility, Document Type creation/lifecycle/deletion rules, lifecycle notification independence and stable stage matching, secured document endpoints and attachment/request pairing, package lifecycle gating and hash integrity, Approval Record semantics/PDF generation, route conditions, signatures, revisions, SQLite query compatibility, and outbox delivery. GitHub Actions restores, builds, and tests with .NET 10 for every pull request.
+The suite covers nested AND/OR evaluation, typed operators and edge cases, cloning stable keys with new IDs, route validation, semantic diffs, simulator/runtime parity, seeded threshold behavior, scoped access isolation, lifecycle notifications, secured document endpoints, package/hash integrity, Approval Record semantics/PDF generation, signatures, revisions, SQLite query compatibility, and outbox delivery. GitHub Actions restores, builds, tests, and collects coverage with .NET 10 for every pull request.

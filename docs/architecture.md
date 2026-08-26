@@ -5,7 +5,11 @@
 ```mermaid
 flowchart TD
     MVC["MVC request, document, and admin UI"] --> Services["Workflow and document services"]
-    Designer["Blazor route designer"] --> EF["Shared EF Core relational model"]
+    Designer["Blazor sequential route designer"] --> Config["Validation, cloning, diff, and simulation services"]
+    Config --> Evaluator["Typed condition evaluator"]
+    Services --> Evaluator
+    Evaluator --> EF["Shared EF Core relational model"]
+    Config --> EF
     Services --> EF
     EF --> SQLite[("SQLite prototype database")]
     Services --> Files["Private local attachment store"]
@@ -25,7 +29,8 @@ The single .NET 10 host deliberately uses conventional MVC for stable form posts
 | `DocumentTypeAccess` | Assigns Administrator, Coordinator, or Viewer to one Document Type without changing global application roles |
 | `LifecycleNotificationRule` | Defines non-approval event, optional stable stage key, recipient resolution, delay, enabled state, and channels |
 | `ApprovalRouteVersion` | Immutable published configuration selected at submission; editable drafts remain isolated |
-| `ApprovalRouteStage` / `RouteRule` | Ordered approval stages, stable cross-version stage key, assignee strategy, signature requirement, and AND conditions |
+| `ApprovalRouteStage` | Ordered sequential approval stage, stable cross-version stage key, assignee strategy, and signature requirement |
+| `RouteConditionGroup` / `RouteConditionRule` / `RouteConditionOperand` | Relational nested AND/OR tree, stable cross-version logical keys, typed operator, ordering, and zero/one/two/many operands |
 | `AlertPolicy` | Versioned approval-stage assignment, reminder, escalation, and outcome behavior |
 | `ApprovalRequest` / `RequestFieldValue` | Request state plus revision-specific snapshots of dynamic values |
 | `RequestRevision` / `RequestAttachment` | Restart history and original attachment metadata by revision |
@@ -33,7 +38,17 @@ The single .NET 10 host deliberately uses conventional MVC for stable form posts
 | `NotificationOutbox` / `NotificationDeliveryAttempt` | Idempotent scheduled delivery, retry/cancellation state, and channel evidence for both notification families |
 | `AuditEvent` | Security-meaningful workflow and configuration events |
 
-The runtime never looks for a stage named President, Finance, or Purchasing. It selects the published route by `DocumentTypeId`, evaluates rules by stable field key, and resolves assignees through requester manager, named user, or a configured person field.
+The runtime never looks for a stage named President, Finance, or Purchasing. It selects the published route by `DocumentTypeId`, evaluates rules by stable field key through `IConditionEvaluator`, and resolves assignees through requester manager, named user, or a configured person field.
+
+## Condition and route-configuration services
+
+`IConditionEvaluator` is the single semantic boundary used by live routing and `IRouteSimulationService`. It evaluates one root group recursively, caps nesting at five levels, parses currency invariantly, compares `DateOnly` values, normalizes booleans and User IDs, and returns a tree of group/rule results with configured values, actual values, match state, and readable explanations. Text and choice comparisons are case-insensitive; `Between` is inclusive.
+
+`IRouteValidationService` validates route sequence/stable keys, assignment resolution, condition structure/operators/operands, alert channels/delays, and lifecycle-rule `StageKey` compatibility. The designer may display these issues while editing, but publication reruns them against current database state inside the transaction. Errors block publication; warnings do not.
+
+`IRouteVersionCloningService` creates new database identities while retaining `StageKey`, `StableGroupKey`, and `StableRuleKey`. `IRouteVersionDiffService` uses those identities to report administrator-readable added, removed, moved, assignment, condition, signature, and alert changes. Publication retires the prior published version only when the new version commits successfully. Requests keep their original `RouteVersionId`.
+
+The visual editor is deliberately a vertical sequence, not a free-form graph. Drag/drop and keyboard move actions both update contiguous stage sequence numbers. The selected stage opens in one focused responsive panel; nested condition groups use the same ordered relational structure persisted by EF Core.
 
 ## Authorization boundary
 
@@ -100,7 +115,7 @@ After approval, `ApprovalRecordService` maps current request values, route/stage
 
 ## Prototype persistence
 
-The app still calls `EnsureCreated`. The default database moved to `document-approval-v3-demo.db` so an existing v2 prototype is preserved rather than destructively upgraded. This is a prototype-only schema strategy; production requires reviewed migrations, backup/restore, rollback, and concurrency policies.
+The app still calls `EnsureCreated`. The default database moved to `document-approval-v4-demo.db` so an existing v3 prototype is preserved rather than destructively upgraded. This is a prototype-only schema strategy; production requires reviewed migrations, backup/restore, rollback, and concurrency policies.
 
 ## Demonstration-to-production substitutions
 

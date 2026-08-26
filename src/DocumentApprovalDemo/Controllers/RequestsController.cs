@@ -27,7 +27,7 @@ public sealed class RequestsController(
     {
         var userId = currentUser.UserId!.Value;
         var requests = await db.Requests.AsNoTracking()
-            .Include(x => x.DocumentType)
+            .Include(x => x.DocumentType).ThenInclude(x => x.Fields)
             .Where(x => x.RequesterId == userId)
             .ToListAsync(cancellationToken);
         return View(requests.OrderByDescending(x => x.CreatedAtUtc).ToList());
@@ -375,7 +375,7 @@ public sealed class RequestsController(
             .Include(x => x.DocumentType)
             .Include(x => x.FieldValues)
             .Include(x => x.Requester).Include(x => x.ConfirmedManager)
-            .Include(x => x.RouteVersion).ThenInclude(x => x!.Stages).ThenInclude(x => x.Rules)
+            .Include(x => x.RouteVersion).ThenInclude(x => x!.Stages).ThenInclude(x => x.ConditionGroups).ThenInclude(x => x.Rules).ThenInclude(x => x.Operands)
             .Include(x => x.Revisions)
             .Include(x => x.Attachments)
             .Include(x => x.Approvals).ThenInclude(x => x.Approver)
@@ -410,7 +410,7 @@ public sealed class RequestsController(
         await PopulateUsersAsync(model.Users, cancellationToken);
 
         var route = await db.RouteVersions.AsNoTracking()
-            .Include(x => x.Stages).ThenInclude(x => x.Rules)
+            .Include(x => x.Stages).ThenInclude(x => x.ConditionGroups).ThenInclude(x => x.Rules).ThenInclude(x => x.Operands)
             .Include(x => x.Stages).ThenInclude(x => x.NamedApprover)
             .Include(x => x.Stages).ThenInclude(x => x.AlertPolicies)
             .SingleAsync(x => x.Route.DocumentTypeId == type.Id && x.Status == RouteVersionStatus.Published, cancellationToken);
@@ -426,7 +426,7 @@ public sealed class RequestsController(
                 _ => "Unknown"
             },
             Condition = stage.IsConditional
-                ? string.Join(" and ", stage.Rules.Select(x => $"{type.Fields.FirstOrDefault(f => f.Key == x.FieldKey)?.Label ?? x.FieldKey} {x.Operator} {x.Value}"))
+                ? ConditionFormatter.StageSummary(stage, ConditionField.Build(type.Fields))
                 : null,
             Alerts = BuildAlertSummary(stage.AlertPolicies)
         }).ToList();

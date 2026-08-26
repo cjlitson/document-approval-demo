@@ -65,7 +65,8 @@ public sealed class ApprovalRecordService : IApprovalRecordService
             foreach (var stage in routeStages)
             {
                 currentApprovals.TryGetValue(stage.Id, out var approval);
-                evidence.Add(MapApproval(stage.Sequence, stage.Name, approval, ConditionExplanation(stage)));
+                evidence.Add(MapApproval(stage.Sequence, stage.Name, approval,
+                    ConditionExplanation(stage, request.DocumentType.Fields)));
             }
         }
         else
@@ -376,24 +377,14 @@ public sealed class ApprovalRecordService : IApprovalRecordService
             conditionExplanation);
     }
 
-    private static string? ConditionExplanation(ApprovalRouteStage stage)
+    private static string? ConditionExplanation(
+        ApprovalRouteStage stage,
+        IEnumerable<DocumentFieldDefinition> fields)
     {
         if (!stage.IsConditional) return null;
-        if (stage.Rules.Count == 0) return "Conditional stage had no configured rules.";
-        return "Runs when " + string.Join(" and ", stage.Rules.Select(x => $"{x.FieldKey} {Operator(x.Operator)} {x.Value}"));
+        if (stage.ConditionGroups.Count == 0) return "Conditional stage had no configured condition tree.";
+        return "Runs when " + ConditionFormatter.StageSummary(stage, ConditionField.Build(fields));
     }
-
-    private static string Operator(ComparisonOperator value) => value switch
-    {
-        ComparisonOperator.GreaterThan => ">",
-        ComparisonOperator.GreaterThanOrEqual => ">=",
-        ComparisonOperator.Equal => "=",
-        ComparisonOperator.NotEqual => "≠",
-        ComparisonOperator.LessThan => "<",
-        ComparisonOperator.LessThanOrEqual => "<=",
-        ComparisonOperator.Contains => "contains",
-        _ => value.ToString()
-    };
 
     private static string FormatValue(RequestFieldValue field)
     {

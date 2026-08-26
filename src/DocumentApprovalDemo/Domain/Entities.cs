@@ -9,7 +9,29 @@ public enum DecisionType { Approve, Reject }
 public enum RouteVersionStatus { Draft, Published, Retired }
 public enum DocumentFieldType { ShortText, LongText, Currency, Date, Choice, Url, Boolean, User }
 public enum AssignmentStrategy { RequesterManager, NamedUser, UserField }
-public enum ComparisonOperator { GreaterThan, GreaterThanOrEqual, Equal, NotEqual, LessThan, LessThanOrEqual, Contains }
+public enum ConditionCombinator { And, Or }
+public enum ComparisonOperator
+{
+    Equals,
+    NotEquals,
+    Contains,
+    NotContains,
+    StartsWith,
+    EndsWith,
+    IsEmpty,
+    IsNotEmpty,
+    GreaterThan,
+    GreaterThanOrEqual,
+    LessThan,
+    LessThanOrEqual,
+    Between,
+    Before,
+    After,
+    InLastDays,
+    InNextDays,
+    In,
+    NotIn
+}
 public enum NotificationChannel { InApp, Email, Teams }
 public enum AlertEventType { Assignment, Reminder, Escalation, Outcome }
 public enum AlertRecipientStrategy { StageApprover, ApproverManagerOrAdministrator, Requester }
@@ -224,18 +246,46 @@ public sealed class ApprovalRouteStage
     [MaxLength(80)] public string? AssigneeFieldKey { get; set; }
     public bool SignatureRequired { get; set; } = true;
     public bool IsConditional { get; set; }
-    public ICollection<RouteRule> Rules { get; set; } = new List<RouteRule>();
+    public ICollection<RouteConditionGroup> ConditionGroups { get; set; } = new List<RouteConditionGroup>();
     public ICollection<AlertPolicy> AlertPolicies { get; set; } = new List<AlertPolicy>();
+
+    public RouteConditionGroup? RootConditionGroup =>
+        ConditionGroups.SingleOrDefault(x => x.ParentGroupId is null && x.ParentGroup is null);
 }
 
-public sealed class RouteRule
+public sealed class RouteConditionGroup
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid StageId { get; set; }
     public ApprovalRouteStage Stage { get; set; } = null!;
+    public Guid? ParentGroupId { get; set; }
+    public RouteConditionGroup? ParentGroup { get; set; }
+    public ICollection<RouteConditionGroup> ChildGroups { get; set; } = new List<RouteConditionGroup>();
+    [MaxLength(80)] public string StableGroupKey { get; set; } = Guid.NewGuid().ToString("N");
+    public ConditionCombinator Combinator { get; set; } = ConditionCombinator.And;
+    public int Sequence { get; set; }
+    public ICollection<RouteConditionRule> Rules { get; set; } = new List<RouteConditionRule>();
+}
+
+public sealed class RouteConditionRule
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid GroupId { get; set; }
+    public RouteConditionGroup Group { get; set; } = null!;
+    [MaxLength(80)] public string StableRuleKey { get; set; } = Guid.NewGuid().ToString("N");
     [MaxLength(80)] public string FieldKey { get; set; } = "";
     public ComparisonOperator Operator { get; set; }
-    [MaxLength(200)] public string Value { get; set; } = "";
+    public int Sequence { get; set; }
+    public ICollection<RouteConditionOperand> Operands { get; set; } = new List<RouteConditionOperand>();
+}
+
+public sealed class RouteConditionOperand
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid RuleId { get; set; }
+    public RouteConditionRule Rule { get; set; } = null!;
+    public int Sequence { get; set; }
+    [MaxLength(1000)] public string Value { get; set; } = "";
 }
 
 public sealed class AlertPolicy

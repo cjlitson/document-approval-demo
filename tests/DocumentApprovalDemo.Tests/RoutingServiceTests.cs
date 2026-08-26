@@ -25,7 +25,7 @@ public sealed class RoutingServiceTests
 
         Assert.False(service.ShouldIncludeStage(executive, request));
 
-        executive.Rules.Single().Operator = ComparisonOperator.GreaterThanOrEqual;
+        executive.ConditionGroups.Single().Rules.Single().Operator = ComparisonOperator.GreaterThanOrEqual;
         Assert.True(service.ShouldIncludeStage(executive, request));
     }
 

@@ -1,0 +1,330 @@
+<section class="condition-group depth-@Depth" aria-label="@($"{Group.Combinator} condition group at level {Depth}")">
+    <header class="condition-group-header">
+        <div class="combinator-control" role="group" aria-label="Condition group combinator">
+            <button type="button" class="@(Group.Combinator == ConditionCombinator.And ? "is-selected" : null)"
+                    disabled="@Disabled" @onclick="() => SetCombinatorAsync(ConditionCombinator.And)">AND</button>
+            <button type="button" class="@(Group.Combinator == ConditionCombinator.Or ? "is-selected" : null)"
+                    disabled="@Disabled" @onclick="() => SetCombinatorAsync(ConditionCombinator.Or)">OR</button>
+        </div>
+        <span>All items are evaluated in sequence.</span>
+        @if (!Root && !Disabled)
+        {
+            <button type="button" class="icon-button danger" aria-label="Remove condition group"
+                    @onclick="RemoveThisGroupAsync">×</button>
+        }
+    </header>
+
+    <div class="condition-items">
+        @foreach (var item in Items())
+        {
+            if (item.Rule is not null)
+            {
+                var rule = item.Rule;
+                var field = FieldFor(rule.FieldKey);
+                <div class="condition-rule" @key="rule.StableRuleKey">
+                    <span class="condition-order" aria-hidden="true">@rule.Sequence</span>
+                    <div class="field condition-field">
+                        <label class="visually-hidden" for="field-@rule.StableRuleKey">Field</label>
+                        <select id="field-@rule.StableRuleKey" value="@rule.FieldKey" disabled="@Disabled"
+                                @onchange="args => ChangeFieldAsync(rule, args.Value?.ToString())">
+                            @foreach (var option in Fields)
+                            {
+                                <option value="@option.Key">@option.Label</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="field condition-operator">
+                        <label class="visually-hidden" for="operator-@rule.StableRuleKey">Operator</label>
+                        <select id="operator-@rule.StableRuleKey" value="@rule.Operator" disabled="@Disabled"
+                                @onchange="args => ChangeOperatorAsync(rule, args.Value?.ToString())">
+                            @foreach (var comparisonOperator in ConditionOperatorCatalog.For(field.FieldType))
+                            {
+                                <option value="@comparisonOperator">@ConditionOperatorCatalog.Label(comparisonOperator)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="condition-operands">
+                        @foreach (var operand in rule.Operands.OrderBy(x => x.Sequence).ToList())
+                        {
+                            var operandLabel = rule.Operator == ComparisonOperator.Between
+                                ? operand.Sequence == 1 ? "From" : "To"
+                                : "Value";
+                            <div class="field compact" @key="operand.Id">
+                                <label class="visually-hidden" for="operand-@operand.Id">@operandLabel</label>
+                                @if (field.FieldType == DocumentFieldType.Choice)
+                                {
+                                    <select id="operand-@operand.Id" @bind="operand.Value" @bind:after="NotifyChangedAsync" disabled="@Disabled">
+                                        <option value="">Select value</option>
+                                        @foreach (var choice in field.Options)
+                                        {
+                                            <option value="@choice">@choice</option>
+                                        }
+                                    </select>
+                                }
+                                else if (field.FieldType == DocumentFieldType.Boolean)
+                                {
+                                    <select id="operand-@operand.Id" @bind="operand.Value" @bind:after="NotifyChangedAsync" disabled="@Disabled">
+                                        <option value="true">Yes</option><option value="false">No</option>
+                                    </select>
+                                }
+                                else if (field.FieldType == DocumentFieldType.User)
+                                {
+                                    <select id="operand-@operand.Id" data-combobox @bind="operand.Value" @bind:after="NotifyChangedAsync" disabled="@Disabled">
+                                        <option value="">Select person</option>
+                                        @foreach (var user in Users.Where(x => x.IsActive).OrderBy(x => x.FullName))
+                                        {
+                                            <option value="@user.Id">@user.FullName — @user.Email</option>
+                                        }
+                                    </select>
+                                }
+                                else
+                                {
+                                    <input id="operand-@operand.Id" type="@InputType(field, rule.Operator)"
+                                           inputmode="@(field.FieldType == DocumentFieldType.Currency ? "decimal" : null)"
+                                           placeholder="@OperandPlaceholder(field, rule.Operator, operand.Sequence)"
+                                           @bind="operand.Value" @bind:event="oninput" @bind:after="NotifyChangedAsync" disabled="@Disabled" />
+                                }
+                                @if (!Disabled && rule.Operator is ComparisonOperator.In or ComparisonOperator.NotIn && rule.Operands.Count > 1)
+                                {
+                                    <button type="button" class="icon-button danger" aria-label="Remove value"
+                                            @onclick="() => RemoveOperandAsync(rule, operand)">×</button>
+                                }
+                            </div>
+                        }
+                        @if (!Disabled && rule.Operator is ComparisonOperator.In or ComparisonOperator.NotIn)
+                        {
+                            <button type="button" class="button small" @onclick="() => AddOperandAsync(rule)">+ Value</button>
+                        }
+                    </div>
+                    @if (!Disabled)
+                    {
+                        <div class="condition-actions">
+                            <button type="button" class="icon-button" aria-label="Move condition up"
+                                    disabled="@(item.Sequence == 1)" @onclick="() => MoveAsync(item, -1)">↑</button>
+                            <button type="button" class="icon-button" aria-label="Move condition down"
+                                    disabled="@(item.Sequence == Items().Count)" @onclick="() => MoveAsync(item, 1)">↓</button>
+                            <button type="button" class="icon-button danger" aria-label="Remove condition"
+                                    @onclick="() => RemoveRuleAsync(rule)">×</button>
+                        </div>
+                    }
+                </div>
+            }
+            else if (item.Group is not null)
+            {
+                <div class="nested-condition-wrap" @key="item.Group.StableGroupKey">
+                    @if (!Disabled)
+                    {
+                        <div class="nested-order-actions">
+                            <button type="button" class="icon-button" aria-label="Move group up"
+                                    disabled="@(item.Sequence == 1)" @onclick="() => MoveAsync(item, -1)">↑</button>
+                            <button type="button" class="icon-button" aria-label="Move group down"
+                                    disabled="@(item.Sequence == Items().Count)" @onclick="() => MoveAsync(item, 1)">↓</button>
+                        </div>
+                    }
+                    <ConditionGroupEditor Stage="Stage" Group="item.Group" Fields="Fields" Users="Users"
+                                          Disabled="Disabled" Depth="@(Depth + 1)" Root="false" Changed="Changed" />
+                </div>
+            }
+        }
+    </div>
+
+    @if (Items().Count == 0)
+    {
+        <p class="condition-empty">This group is empty and blocks publication.</p>
+    }
+
+    @if (!Disabled)
+    {
+        <footer class="condition-group-actions">
+            <button type="button" class="button small" @onclick="AddRuleAsync">+ Add condition</button>
+            <button type="button" class="button small" disabled="@(Depth >= ConditionEvaluator.MaximumNestingDepth)"
+                    @onclick="AddGroupAsync">+ Add group</button>
+            @if (Depth >= ConditionEvaluator.MaximumNestingDepth)
+            {
+                <small>Maximum nesting depth reached.</small>
+            }
+        </footer>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public ApprovalRouteStage Stage { get; set; } = null!;
+    [Parameter, EditorRequired] public RouteConditionGroup Group { get; set; } = null!;
+    [Parameter, EditorRequired] public IReadOnlyList<ConditionField> Fields { get; set; } = [];
+    [Parameter, EditorRequired] public IReadOnlyList<ApplicationUser> Users { get; set; } = [];
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public int Depth { get; set; } = 1;
+    [Parameter] public bool Root { get; set; }
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private List<ConditionItem> Items() =>
+        Group.Rules.Select(x => new ConditionItem(x.Sequence, x, null))
+            .Concat(Stage.ConditionGroups.Where(x => x.ParentGroupId == Group.Id ||
+                                                      (x.ParentGroupId is null && ReferenceEquals(x.ParentGroup, Group)))
+                .Select(x => new ConditionItem(x.Sequence, null, x)))
+            .OrderBy(x => x.Sequence).ToList();
+
+    private ConditionField FieldFor(string key) =>
+        Fields.FirstOrDefault(x => string.Equals(x.Key, key, StringComparison.OrdinalIgnoreCase)) ??
+        Fields.FirstOrDefault() ?? new ConditionField("title", "Request title", DocumentFieldType.ShortText, []);
+
+    private async Task SetCombinatorAsync(ConditionCombinator value)
+    {
+        Group.Combinator = value;
+        await NotifyChangedAsync();
+    }
+
+    private async Task ChangeFieldAsync(RouteConditionRule rule, string? key)
+    {
+        rule.FieldKey = key ?? "title";
+        var operators = ConditionOperatorCatalog.For(FieldFor(rule.FieldKey).FieldType);
+        if (!operators.Contains(rule.Operator)) rule.Operator = operators[0];
+        EnsureOperands(rule);
+        await NotifyChangedAsync();
+    }
+
+    private async Task ChangeOperatorAsync(RouteConditionRule rule, string? value)
+    {
+        if (Enum.TryParse<ComparisonOperator>(value, out var comparisonOperator)) rule.Operator = comparisonOperator;
+        EnsureOperands(rule);
+        await NotifyChangedAsync();
+    }
+
+    private void EnsureOperands(RouteConditionRule rule)
+    {
+        var (minimum, maximum) = ConditionOperatorCatalog.OperandRange(rule.Operator);
+        while (rule.Operands.Count < minimum)
+            rule.Operands.Add(new RouteConditionOperand { Rule = rule, Sequence = rule.Operands.Count + 1 });
+        if (maximum != int.MaxValue)
+        {
+            foreach (var operand in rule.Operands.OrderBy(x => x.Sequence).Skip(maximum).ToList())
+                rule.Operands.Remove(operand);
+        }
+        RenumberOperands(rule);
+    }
+
+    private async Task AddRuleAsync()
+    {
+        var field = Fields.FirstOrDefault() ?? new ConditionField("title", "Request title", DocumentFieldType.ShortText, []);
+        var rule = new RouteConditionRule
+        {
+            Group = Group,
+            StableRuleKey = Guid.NewGuid().ToString("N"),
+            FieldKey = field.Key,
+            Operator = ConditionOperatorCatalog.For(field.FieldType)[0],
+            Sequence = Items().Count + 1
+        };
+        Group.Rules.Add(rule);
+        EnsureOperands(rule);
+        await NotifyChangedAsync();
+    }
+
+    private async Task AddGroupAsync()
+    {
+        if (Depth >= ConditionEvaluator.MaximumNestingDepth) return;
+        var child = new RouteConditionGroup
+        {
+            Stage = Stage,
+            ParentGroup = Group,
+            StableGroupKey = Guid.NewGuid().ToString("N"),
+            Combinator = ConditionCombinator.And,
+            Sequence = Items().Count + 1
+        };
+        Stage.ConditionGroups.Add(child);
+        Group.ChildGroups.Add(child);
+        await NotifyChangedAsync();
+    }
+
+    private async Task RemoveRuleAsync(RouteConditionRule rule)
+    {
+        Group.Rules.Remove(rule);
+        NormalizeItemSequences();
+        await NotifyChangedAsync();
+    }
+
+    private async Task RemoveThisGroupAsync()
+    {
+        if (Root) return;
+        RemoveGroupRecursive(Group);
+        Group.ParentGroup?.ChildGroups.Remove(Group);
+        NormalizeParentSequences(Group.ParentGroup);
+        await NotifyChangedAsync();
+    }
+
+    private void RemoveGroupRecursive(RouteConditionGroup group)
+    {
+        foreach (var child in Stage.ConditionGroups.Where(x => ReferenceEquals(x.ParentGroup, group) || x.ParentGroupId == group.Id).ToList())
+            RemoveGroupRecursive(child);
+        Stage.ConditionGroups.Remove(group);
+    }
+
+    private async Task MoveAsync(ConditionItem item, int direction)
+    {
+        var ordered = Items();
+        var index = ordered.FindIndex(x => ReferenceEquals(x.Rule, item.Rule) && ReferenceEquals(x.Group, item.Group));
+        var target = index + direction;
+        if (index < 0 || target < 0 || target >= ordered.Count) return;
+        (ordered[index], ordered[target]) = (ordered[target], ordered[index]);
+        for (var position = 0; position < ordered.Count; position++) ordered[position].SetSequence(position + 1);
+        await NotifyChangedAsync();
+    }
+
+    private async Task AddOperandAsync(RouteConditionRule rule)
+    {
+        rule.Operands.Add(new RouteConditionOperand { Rule = rule, Sequence = rule.Operands.Count + 1 });
+        await NotifyChangedAsync();
+    }
+
+    private async Task RemoveOperandAsync(RouteConditionRule rule, RouteConditionOperand operand)
+    {
+        rule.Operands.Remove(operand);
+        RenumberOperands(rule);
+        await NotifyChangedAsync();
+    }
+
+    private static void RenumberOperands(RouteConditionRule rule)
+    {
+        var ordered = rule.Operands.OrderBy(x => x.Sequence).ToList();
+        for (var index = 0; index < ordered.Count; index++) ordered[index].Sequence = index + 1;
+    }
+
+    private void NormalizeItemSequences()
+    {
+        var ordered = Items();
+        for (var index = 0; index < ordered.Count; index++) ordered[index].SetSequence(index + 1);
+    }
+
+    private void NormalizeParentSequences(RouteConditionGroup? parent)
+    {
+        if (parent is null) return;
+        var items = parent.Rules.Select(x => new ConditionItem(x.Sequence, x, null))
+            .Concat(Stage.ConditionGroups.Where(x => ReferenceEquals(x.ParentGroup, parent) || x.ParentGroupId == parent.Id)
+                .Select(x => new ConditionItem(x.Sequence, null, x)))
+            .OrderBy(x => x.Sequence).ToList();
+        for (var index = 0; index < items.Count; index++) items[index].SetSequence(index + 1);
+    }
+
+    private Task NotifyChangedAsync() => Changed.InvokeAsync();
+
+    private static string InputType(ConditionField field, ComparisonOperator comparisonOperator) =>
+        comparisonOperator is ComparisonOperator.InLastDays or ComparisonOperator.InNextDays ? "number" : field.FieldType switch
+        {
+            DocumentFieldType.Currency => "number",
+            DocumentFieldType.Date => "date",
+            _ => "text"
+        };
+
+    private static string OperandPlaceholder(ConditionField field, ComparisonOperator comparisonOperator, int sequence) =>
+        comparisonOperator is ComparisonOperator.InLastDays or ComparisonOperator.InNextDays ? "Number of days" :
+        comparisonOperator == ComparisonOperator.Between ? (sequence == 1 ? "From" : "To") :
+        field.FieldType == DocumentFieldType.Currency ? "0.00" : "Comparison value";
+
+    private sealed record ConditionItem(int Sequence, RouteConditionRule? Rule, RouteConditionGroup? Group)
+    {
+        public void SetSequence(int value)
+        {
+            if (Rule is not null) Rule.Sequence = value;
+            if (Group is not null) Group.Sequence = value;
+        }
+    }
+}

@@ -17,7 +17,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<ApprovalRoute> Routes => Set<ApprovalRoute>();
     public DbSet<ApprovalRouteVersion> RouteVersions => Set<ApprovalRouteVersion>();
     public DbSet<ApprovalRouteStage> RouteStages => Set<ApprovalRouteStage>();
-    public DbSet<RouteRule> RouteRules => Set<RouteRule>();
+    public DbSet<RouteConditionGroup> RouteConditionGroups => Set<RouteConditionGroup>();
+    public DbSet<RouteConditionRule> RouteConditionRules => Set<RouteConditionRule>();
+    public DbSet<RouteConditionOperand> RouteConditionOperands => Set<RouteConditionOperand>();
     public DbSet<AlertPolicy> AlertPolicies => Set<AlertPolicy>();
     public DbSet<ApprovalInstance> ApprovalInstances => Set<ApprovalInstance>();
     public DbSet<ApprovalDecision> ApprovalDecisions => Set<ApprovalDecision>();
@@ -60,6 +62,20 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         modelBuilder.Entity<ApprovalRouteStage>().HasIndex(x => new { x.RouteVersionId, x.StageKey }).IsUnique();
         modelBuilder.Entity<ApprovalRouteStage>()
             .HasOne(x => x.NamedApprover).WithMany().HasForeignKey(x => x.NamedApproverId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<RouteConditionGroup>().HasIndex(x => new { x.StageId, x.StableGroupKey }).IsUnique();
+        modelBuilder.Entity<RouteConditionGroup>()
+            .HasOne(x => x.Stage).WithMany(x => x.ConditionGroups)
+            .HasForeignKey(x => x.StageId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<RouteConditionGroup>()
+            .HasOne(x => x.ParentGroup).WithMany(x => x.ChildGroups)
+            .HasForeignKey(x => x.ParentGroupId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<RouteConditionRule>().HasIndex(x => new { x.GroupId, x.StableRuleKey }).IsUnique();
+        modelBuilder.Entity<RouteConditionRule>()
+            .HasOne(x => x.Group).WithMany(x => x.Rules)
+            .HasForeignKey(x => x.GroupId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<RouteConditionOperand>()
+            .HasOne(x => x.Rule).WithMany(x => x.Operands)
+            .HasForeignKey(x => x.RuleId).OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<ApprovalInstance>()
             .HasOne(x => x.Approver).WithMany().HasForeignKey(x => x.ApproverId).OnDelete(DeleteBehavior.Restrict);

@@ -14,7 +14,11 @@ public sealed class ApprovalRecordServiceTests
         var route = new ApprovalRouteVersion { VersionNumber = 1, Name = "Policy governance" };
         var managerStage = new ApprovalRouteStage { RouteVersion = route, Sequence = 1, Name = "Manager Review", StageKey = "manager" };
         var conditionalStage = new ApprovalRouteStage { RouteVersion = route, Sequence = 2, Name = "Compliance Review", StageKey = "compliance", IsConditional = true };
-        conditionalStage.Rules.Add(new RouteRule { Stage = conditionalStage, FieldKey = "risk_level", Operator = ComparisonOperator.Equal, Value = "Critical" });
+        var root = new RouteConditionGroup { Stage = conditionalStage, StableGroupKey = "root", Sequence = 1 };
+        var rule = new RouteConditionRule { Group = root, StableRuleKey = "risk", Sequence = 1, FieldKey = "risk_level", Operator = ComparisonOperator.Equals };
+        rule.Operands.Add(new RouteConditionOperand { Rule = rule, Sequence = 1, Value = "Critical" });
+        root.Rules.Add(rule);
+        conditionalStage.ConditionGroups.Add(root);
         route.Stages.Add(managerStage);
         route.Stages.Add(conditionalStage);
         var request = new ApprovalRequest
@@ -26,6 +30,7 @@ public sealed class ApprovalRecordServiceTests
             SubmittedAtUtc = DateTimeOffset.UtcNow.AddDays(-1),
             CompletedAtUtc = DateTimeOffset.UtcNow
         };
+        request.DocumentType.Fields.Add(new DocumentFieldDefinition { Key = "risk_level", Label = "Risk level", FieldType = DocumentFieldType.Choice });
         request.FieldValues.Add(new RequestFieldValue { RevisionNumber = 1, Sequence = 1, Label = "Risk level", FieldKey = "risk_level", Value = "High" });
         request.Approvals.Add(new ApprovalInstance
         {
